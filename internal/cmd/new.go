@@ -31,7 +31,7 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(newCmd)
-	
+
 	newCmd.Flags().StringVar(&newGitHubOrg, "github-org", "", "GitHub organization (e.g., mycompany)")
 	newCmd.Flags().StringVar(&newDockerRegistry, "docker-registry", "", "Docker registry (e.g., gcr.io/mycompany)")
 	newCmd.Flags().StringVar(&newGCPProjectID, "gcp-project", "", "GCP project ID")
@@ -43,7 +43,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 
 	// Create generator
 	gen := generator.NewWorkspaceGenerator()
-	
+
 	// Prepare options
 	opts := generator.GeneratorOptions{
 		OutputDir: ".",
