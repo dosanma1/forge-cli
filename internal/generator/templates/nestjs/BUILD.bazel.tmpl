@@ -1,0 +1,59 @@
+"""{{.ServiceName}} service BUILD configuration"""
+
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+
+package(default_visibility = ["//visibility:public"])
+
+# Export files for reference
+exports_files([
+    "Dockerfile",
+    "package.json",
+])
+
+# Package the entire service directory for Docker build context
+pkg_tar(
+    name = "service_context",
+    srcs = glob([
+        "src/**/*",
+        "test/**/*",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "nest-cli.json",
+        ".eslintrc.js",
+        ".prettierrc",
+    ]),
+    strip_prefix = ".",
+)
+
+# Build OCI image
+# For NestJS, we rely on the Dockerfile for build (npm install, TypeScript compilation, etc.)
+oci_image(
+    name = "image",
+    base = "@node_image",
+    tars = [":service_context"],
+    entrypoint = ["node", "dist/main"],
+    exposed_ports = ["3000/tcp"],
+    env = {
+        "NODE_ENV": "production",
+        "PORT": "3000",
+    },
+    workdir = "/app",
+)
+
+# Export image as Docker-format tarball for Skaffold compatibility
+oci_load(
+    name = "image.tar",
+    image = ":image",
+    repo_tags = ["{{.ServiceName}}:latest"],
+    format = "docker",
+)
+
+# Extract the actual tarball file for Skaffold Bazel builder
+filegroup(
+    name = "image_tarball.tar",
+    srcs = [":image.tar"],
+    output_group = "tarball",
+    visibility = ["//visibility:public"],
+)
