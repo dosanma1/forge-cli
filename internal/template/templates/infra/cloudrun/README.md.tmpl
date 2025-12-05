@@ -1,0 +1,75 @@
+# Cloud Run Deployments
+
+This directory contains configuration files for deploying services to Google Cloud Run.
+
+## Overview
+
+Cloud Run allows you to deploy containerized applications that automatically scale based on traffic.
+
+## Deployment
+
+Deploy services using Forge CLI:
+
+```bash
+# Deploy to Cloud Run (dev environment)
+forge deploy --target=cloudrun --env=dev
+
+# Deploy to Cloud Run (production)
+forge deploy --target=cloudrun --env=prod
+```
+
+Or use the GitHub Actions workflow:
+
+```bash
+# Trigger manual deployment
+gh workflow run deploy-cloudrun.yml --field environment=dev
+```
+
+## Service Configuration
+
+Each service is deployed with:
+
+- **Auto-scaling**: Scales from 0 to N instances based on traffic
+- **Memory**: Configurable memory limits (default: 512Mi)
+- **CPU**: Configurable CPU allocation (default: 1 vCPU)
+- **Concurrency**: Number of concurrent requests per instance (default: 80)
+
+## Environment Variables
+
+Set environment variables using Google Secret Manager:
+
+```bash
+# Create a secret
+gcloud secrets create <service-name>-env \
+  --replication-policy="automatic"
+
+# Grant access to the Cloud Run service account
+gcloud secrets add-iam-policy-binding <service-name>-env \
+  --member="serviceAccount:<project-id>@<project-id>.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+## Custom Domains
+
+To configure a custom domain:
+
+```bash
+gcloud run domain-mappings create \
+  --service=<service-name> \
+  --domain=<your-domain.com> \
+  --region=<region>
+```
+
+## Monitoring
+
+Monitor your Cloud Run services:
+
+- **Logs**: View in Cloud Logging
+- **Metrics**: Monitor in Cloud Monitoring
+- **Traces**: View in Cloud Trace
+
+## Resources
+
+- [Cloud Run Documentation](https://cloud.google.com/run/docs)
+- [Cloud Run Best Practices](https://cloud.google.com/run/docs/best-practices)
+- [Cloud Run Pricing](https://cloud.google.com/run/pricing)

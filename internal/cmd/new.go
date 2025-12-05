@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/generator"
 	"github.com/spf13/cobra"
@@ -41,6 +44,50 @@ func init() {
 func runNew(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
+	reader := bufio.NewReader(os.Stdin)
+
+	// Ask if user wants to create a backend service
+	fmt.Println("🔧 Backend Setup")
+	fmt.Print("Do you want to create a Go backend service? (Y/n): ")
+
+	backendResponse, _ := reader.ReadString('\n')
+	backendResponse = strings.TrimSpace(strings.ToLower(backendResponse))
+
+	createBackend := backendResponse == "" || backendResponse == "y" || backendResponse == "yes"
+	var backendServiceName string
+
+	if createBackend {
+		fmt.Print("Enter service name (e.g., api-server): ")
+		serviceNameInput, _ := reader.ReadString('\n')
+		backendServiceName = strings.TrimSpace(serviceNameInput)
+
+		if backendServiceName == "" {
+			backendServiceName = "api-server" // default name
+			fmt.Printf("Using default name: %s\n", backendServiceName)
+		}
+	}
+
+	// Ask if user wants to create a frontend app
+	fmt.Println("\n🎨 Frontend Setup")
+	fmt.Print("Do you want to create a frontend application? (y/N): ")
+
+	response, _ := reader.ReadString('\n')
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	createFrontend := response == "y" || response == "yes"
+	var frontendAppName string
+
+	if createFrontend {
+		fmt.Print("Enter frontend application name (e.g., web-app): ")
+		appNameInput, _ := reader.ReadString('\n')
+		frontendAppName = strings.TrimSpace(appNameInput)
+
+		if frontendAppName == "" {
+			frontendAppName = "web-app" // default name
+			fmt.Printf("Using default name: %s\n", frontendAppName)
+		}
+	}
+
 	// Create generator
 	gen := generator.NewWorkspaceGenerator()
 
@@ -49,10 +96,14 @@ func runNew(cmd *cobra.Command, args []string) error {
 		OutputDir: ".",
 		Name:      name,
 		Data: map[string]interface{}{
-			"github_org":      newGitHubOrg,
-			"docker_registry": newDockerRegistry,
-			"gcp_project_id":  newGCPProjectID,
-			"k8s_namespace":   newK8sNamespace,
+			"github_org":           newGitHubOrg,
+			"docker_registry":      newDockerRegistry,
+			"gcp_project_id":       newGCPProjectID,
+			"k8s_namespace":        newK8sNamespace,
+			"create_backend":       createBackend,
+			"backend_service_name": backendServiceName,
+			"create_frontend":      createFrontend,
+			"frontend_app_name":    frontendAppName,
 		},
 		DryRun: false,
 	}

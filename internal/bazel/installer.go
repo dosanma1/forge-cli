@@ -1,5 +1,4 @@
 package bazel
-package bazel
 
 import (
 	"context"
@@ -9,181 +8,171 @@ import (
 	"path/filepath"
 	"runtime"
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	return err	_, err = io.Copy(destFile, sourceFile)	defer destFile.Close()	}		return err	if err != nil {	destFile, err := os.Create(dst)	defer sourceFile.Close()	}		return err	if err != nil {	sourceFile, err := os.Open(src)func copyFile(src, dst string) error {// copyFile copies a file from src to dst.}	return fmt.Errorf("not implemented")	// TODO: Implement HTTP downloadfunc downloadFile(url string, dest string) error {// downloadFile is a helper to download files (placeholder).}	return nil	fmt.Println("✅ Bazel uninstalled successfully")	}		return fmt.Errorf("failed to remove bazel: %w", err)	if err := os.RemoveAll(bazelDir); err != nil {	}		return fmt.Errorf("bazel installation not found")	if _, err := os.Stat(bazelDir); os.IsNotExist(err) {	bazelDir := filepath.Join(i.forgeHome, "bazel")func (i *Installer) Uninstall() error {// Uninstall removes forge-managed Bazel installation.}	return nil		fmt.Println("   Bazelisk will automatically use the version specified in your workspace")	// For bazelisk, updates are automatic - it downloads the version specified in .bazelversion		fmt.Printf("   Current version: %s\n", currentVersion)	}		return fmt.Errorf("failed to get current version: %w", err)	if err != nil {	currentVersion, err := i.GetVersion(ctx)	// Check current version		fmt.Println("🔄 Checking for Bazel updates...")func (i *Installer) Update(ctx context.Context) error {// Update checks for and installs Bazel updates.}	return executor.Version(ctx)	}		return "", err	if err != nil {	executor, err := NewExecutor(i.forgeHome, i.verbose)func (i *Installer) GetVersion(ctx context.Context) (string, error) {// GetVersion returns the installed Bazel version.}	return fmt.Errorf("download not yet implemented - please install bazelisk manually")		// For now, this is a simplified version	// TODO: Implement actual HTTP download with progress	)		progressbar.OptionFullWidth(),		progressbar.OptionSpinnerType(14),		}),			fmt.Fprint(os.Stderr, "\n")		progressbar.OptionOnCompletion(func() {		progressbar.OptionShowCount(),		progressbar.OptionThrottle(65*1000000), // 65ms		progressbar.OptionSetWidth(40),		progressbar.OptionShowBytes(true),		progressbar.OptionSetWriter(os.Stderr),		progressbar.OptionSetDescription("Downloading"),	bar := progressbar.NewOptions(-1,	// Create progress bar		// For now, using curl/wget as a quick solution	// This is a placeholder - in real implementation, use HTTP clientfunc (i *Installer) downloadWithProgress(ctx context.Context, url, targetPath string) error {// downloadWithProgress downloads a file with a progress bar.}	return url, filename	url := fmt.Sprintf("%s/v%s/%s", bazeliskBaseURL, bazeliskVersion, filename)	}		filename = "bazelisk-linux-amd64" // Default fallback	default:		filename = "bazelisk-windows-amd64.exe"	case "windows":		}			filename = "bazelisk-linux-amd64"		} else {			filename = "bazelisk-linux-arm64"		if runtime.GOARCH == "arm64" {	case "linux":		}			filename = "bazelisk-darwin-amd64"		} else {			filename = "bazelisk-darwin-arm64"		if runtime.GOARCH == "arm64" {	case "darwin":	switch runtime.GOOS {		var filename stringfunc (i *Installer) getBazeliskURL() (string, string) {// getBazeliskURL returns the download URL for the current platform.}	return err == nil	_, err := findBazel()func (i *Installer) IsInstalled() bool {// IsInstalled checks if Bazel is available.}	return nil	fmt.Println("   Bazel will be automatically downloaded on first use.")	fmt.Printf("   Location: %s\n", targetPath)	fmt.Println("✅ Bazelisk installed successfully!")	}		return fmt.Errorf("failed to make bazelisk executable: %w", err)	if err := os.Chmod(targetPath, 0755); err != nil {	// Make executable	}		return fmt.Errorf("failed to download bazelisk: %w", err)	if err := i.downloadWithProgress(ctx, downloadURL, targetPath); err != nil {	// Download with progress bar	fmt.Printf("📦 Downloading Bazelisk %s...\n", bazeliskVersion)	targetPath := filepath.Join(bazelDir, "bazelisk")	downloadURL, filename := i.getBazeliskURL()	// Determine download URL based on OS and architecture	}		return fmt.Errorf("failed to create bazel directory: %w", err)	if err := os.MkdirAll(bazelDir, 0755); err != nil {	bazelDir := filepath.Join(i.forgeHome, "bazel", "bin")func (i *Installer) Install(ctx context.Context) error {// Install downloads and installs Bazelisk.}	}		verbose:   verbose,		forgeHome: forgeHome,	return &Installer{	forgeHome := filepath.Join(os.Getenv("HOME"), ".forge")func NewInstaller(verbose bool) *Installer {// NewInstaller creates a new Bazel installer.}	verbose   bool	forgeHome stringtype Installer struct {// Installer handles Bazel/Bazelisk installation.)	bazeliskBaseURL = "https://github.com/bazelbuild/bazelisk/releases/download"	bazeliskVersion = "1.20.0"const ()	"github.com/schollz/progressbar/v3"
+	"github.com/schollz/progressbar/v3"
+)
+
+const (
+	bazeliskVersion = "1.20.0"
+	bazeliskBaseURL = "https://github.com/bazelbuild/bazelisk/releases/download"
+)
+
+// Installer handles Bazel/Bazelisk installation.
+type Installer struct {
+	forgeHome string
+	verbose   bool
+}
+
+// NewInstaller creates a new Bazel installer.
+func NewInstaller(verbose bool) *Installer {
+	forgeHome := filepath.Join(os.Getenv("HOME"), ".forge")
+	return &Installer{
+		forgeHome: forgeHome,
+		verbose:   verbose,
+	}
+}
+
+// Install downloads and installs Bazelisk.
+func (i *Installer) Install(ctx context.Context) error {
+	bazelDir := filepath.Join(i.forgeHome, "bazel", "bin")
+	if err := os.MkdirAll(bazelDir, 0755); err != nil {
+		return fmt.Errorf("failed to create bazel directory: %w", err)
+	}
+
+	// Determine download URL based on OS and architecture
+	downloadURL, _ := i.getBazeliskURL()
+	targetPath := filepath.Join(bazelDir, "bazelisk")
+	fmt.Printf("📦 Downloading Bazelisk %s...\n", bazeliskVersion)
+
+	// Download with progress bar
+	if err := i.downloadWithProgress(ctx, downloadURL, targetPath); err != nil {
+		return fmt.Errorf("failed to download bazelisk: %w", err)
+	}
+
+	// Make executable
+	if err := os.Chmod(targetPath, 0755); err != nil {
+		return fmt.Errorf("failed to make bazelisk executable: %w", err)
+	}
+
+	fmt.Println("✅ Bazelisk installed successfully!")
+	fmt.Printf("   Location: %s\n", targetPath)
+	fmt.Println("   Bazel will be automatically downloaded on first use.")
+	return nil
+}
+
+// IsInstalled checks if Bazel is available.
+func (i *Installer) IsInstalled() bool {
+	_, err := findBazel()
+	return err == nil
+}
+
+// getBazeliskURL returns the download URL for the current platform.
+func (i *Installer) getBazeliskURL() (string, string) {
+	var filename string
+	switch runtime.GOOS {
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			filename = "bazelisk-darwin-arm64"
+		} else {
+			filename = "bazelisk-darwin-amd64"
+		}
+	case "linux":
+		if runtime.GOARCH == "arm64" {
+			filename = "bazelisk-linux-arm64"
+		} else {
+			filename = "bazelisk-linux-amd64"
+		}
+	case "windows":
+		filename = "bazelisk-windows-amd64.exe"
+	default:
+		filename = "bazelisk-linux-amd64" // Default fallback
+	}
+	url := fmt.Sprintf("%s/v%s/%s", bazeliskBaseURL, bazeliskVersion, filename)
+	return url, filename
+}
+
+// downloadWithProgress downloads a file with a progress bar.
+func (i *Installer) downloadWithProgress(ctx context.Context, url, targetPath string) error {
+	// This is a placeholder - in real implementation, use HTTP client
+	// For now, using curl/wget as a quick solution
+
+	// Create progress bar
+	_ = progressbar.NewOptions(-1,
+		progressbar.OptionSetDescription("Downloading"),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionThrottle(65*1000000), // 65ms
+		progressbar.OptionShowCount(),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(os.Stderr, "\n")
+		}),
+		progressbar.OptionSpinnerType(14),
+		progressbar.OptionFullWidth(),
+	)
+
+	// TODO: Implement actual HTTP download with progress
+	// For now, this is a simplified version
+	return fmt.Errorf("download not yet implemented - please install bazelisk manually")
+}
+
+// GetVersion returns the installed Bazel version.
+func (i *Installer) GetVersion(ctx context.Context) (string, error) {
+	executor, err := NewExecutor(i.forgeHome, i.verbose)
+	if err != nil {
+		return "", err
+	}
+	return executor.Version(ctx)
+}
+
+// Update checks for and installs Bazel updates.
+func (i *Installer) Update(ctx context.Context) error {
+	fmt.Println("🔄 Checking for Bazel updates...")
+
+	// Check current version
+	currentVersion, err := i.GetVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+	fmt.Printf("   Current version: %s\n", currentVersion)
+
+	// For bazelisk, updates are automatic - it downloads the version specified in .bazelversion
+	fmt.Println("   Bazelisk will automatically use the version specified in your workspace")
+	return nil
+}
+
+// Uninstall removes forge-managed Bazel installation.
+func (i *Installer) Uninstall() error {
+	bazelDir := filepath.Join(i.forgeHome, "bazel")
+	if _, err := os.Stat(bazelDir); os.IsNotExist(err) {
+		return fmt.Errorf("bazel installation not found")
+	}
+	if err := os.RemoveAll(bazelDir); err != nil {
+		return fmt.Errorf("failed to remove bazel: %w", err)
+	}
+	fmt.Println("✅ Bazel uninstalled successfully")
+	return nil
+}
+
+// downloadFile is a helper to download files (placeholder).
+func downloadFile(url string, dest string) error {
+	// TODO: Implement HTTP download
+	return fmt.Errorf("not implemented")
+}
+
+// copyFile copies a file from src to dst.
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	return err
+}

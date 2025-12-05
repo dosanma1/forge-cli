@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Forge
+        run: |
+          # Install forge-cli
+          curl -sSL https://raw.githubusercontent.com/{{.GitHubOrg}}/forge-cli/main/install.sh | bash
+          echo "$HOME/.forge/bin" >> $GITHUB_PATH
+
+      - name: Setup development environment
+        run: forge setup
+
+      - name: Run tests
+        run: forge test --ci
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Forge
+        run: |
+          curl -sSL https://raw.githubusercontent.com/{{.GitHubOrg}}/forge-cli/main/install.sh | bash
+          echo "$HOME/.forge/bin" >> $GITHUB_PATH
+
+      - name: Setup development environment
+        run: forge setup
+
+      - name: Lint code
+        run: forge lint
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"

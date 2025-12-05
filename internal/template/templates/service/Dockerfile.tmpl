@@ -1,0 +1,33 @@
+# Multi-stage build for {{.ServiceName}}
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /workspace
+
+# Copy go modules
+COPY go.work ./
+COPY backend/services/{{.ServiceName}}/go.mod ./backend/services/{{.ServiceName}}/
+# Copy go.sum if it exists (glob pattern makes it optional)
+COPY backend/services/{{.ServiceName}}/go.su[m] ./backend/services/{{.ServiceName}}/ || true
+
+# Download dependencies
+RUN cd backend/services/{{.ServiceName}} && go mod download
+
+# Copy source code
+COPY backend/services/{{.ServiceName}}/ ./backend/services/{{.ServiceName}}/
+
+# Build the binary
+RUN cd backend/services/{{.ServiceName}} && \
+    CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/server
+
+# Final stage
+FROM gcr.io/distroless/static-debian12:latest
+
+WORKDIR /app
+
+COPY --from=builder /server /app/server
+
+EXPOSE 8080
+
+ENV PORT=8080
+
+ENTRYPOINT ["/app/server"]

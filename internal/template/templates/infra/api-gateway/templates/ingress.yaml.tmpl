@@ -1,0 +1,75 @@
+{{`{{- if and .Values.apiGateway.enabled (gt (len .Values.services) 0) -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.apiGateway.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.apiGateway.tls.enabled }}
+    cert-manager.io/cluster-issuer: api-gateway-issuer
+    {{- end }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.apiGateway.domain }}
+      http:
+        paths:
+          {{- range $service, $config := .Values.services }}
+          {{- if and $config.enabled (gt (len $config.paths) 0) }}
+          # Regular service paths
+          {{- range $config.paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $config.name }}
+                port:
+                  number: {{ $config.port }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+
+---
+# Separate ingress for health endpoints with rewrite rules
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway-health
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+  annotations:
+    # Health endpoint annotations - rewrite service-specific paths to /healthz
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /healthz/
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.apiGateway.domain }}
+      http:
+        paths:
+          {{- range $serviceName, $config := .Values.services }}
+          {{- if $config.enabled }}
+          # Health check path - auto-generated from service name or overridden
+          - path: {{ include "api-gateway.healthPath" (dict "service" $config "serviceName" $serviceName) }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $config.name }}
+                port:
+                  number: {{ $config.port }}
+          {{- end }}
+          {{- end }}
+  {{- if .Values.apiGateway.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.apiGateway.domain }}
+      secretName: {{ .Values.apiGateway.tls.secretName }}
+  {{- end }}
+{{- end }}
+`}}

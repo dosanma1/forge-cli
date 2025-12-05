@@ -1,0 +1,50 @@
+# Default API Gateway configuration
+# Environment-specific values should be set in envs/{env}.yaml
+
+apiGateway:
+  enabled: true
+  domain: "" # Set in environment-specific values
+  annotations:
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, PUT, POST, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Request-Context, Content-Type, traceparent, Origin, X-Requested-With"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-max-age: "86400"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  tls:
+    enabled: false
+    secretName: ""
+    selfSigned: false
+
+# Common service configurations
+services: {}
+  # Example service configuration:
+  # my-service:
+  #   enabled: false
+  #   name: my-service
+  #   port: 80
+  #   paths: []
+  #     # - path: /api/my-service
+  #     #   pathType: Prefix
+
+# Ingress-Nginx Controller configuration
+# Set to false since ingress-nginx should be managed separately
+ingress-nginx:
+  enabled: false
+
+# Default monitoring configuration
+monitoring:
+  enabled: false
+  metrics:
+    enabled: false
+  logging:
+    level: info
+
+# Cert-manager configuration
+certManager:
+  enabled: true
+  acme:
+    enabled: true
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+    email: "admin@example.com"
+    ingressClass: "nginx"

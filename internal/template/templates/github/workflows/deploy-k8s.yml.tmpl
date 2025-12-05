@@ -1,0 +1,68 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches: [develop]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: "dev"
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    environment: ${{"{{"}} (github.event_name == 'release' && github.event.action == 'published') && 'prod' || (github.event_name == 'workflow_dispatch' && inputs.environment) || 'dev' }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{"{{"}} secrets.WIF_PROVIDER }}
+          service_account: ${{"{{"}} secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Forge
+        run: |
+          curl -sSL https://raw.githubusercontent.com/{{.GitHubOrg}}/forge-cli/main/install.sh | bash
+          echo "$HOME/.forge/bin" >> $GITHUB_PATH
+
+      - name: Setup development environment
+        run: forge setup
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{"{{"}} vars.REGISTRY }}
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{"{{"}} vars.GKE_CLUSTER_NAME }} \
+            --zone=${{"{{"}} vars.GKE_ZONE }} \
+            --project=${{"{{"}} vars.GCP_PROJECT_ID }}
+
+      - name: Build and push images
+        run: forge build --push
+        env:
+          REGISTRY: ${{"{{"}} vars.REGISTRY }}
+          GCP_PROJECT_ID: ${{"{{"}} vars.GCP_PROJECT_ID }}
+
+      - name: Deploy to Kubernetes
+        run: forge deploy --target=kubernetes --env=${{"{{"}} vars.ENV }}
+        env:
+          NAMESPACE: ${{"{{"}} vars.K8S_NAMESPACE }}

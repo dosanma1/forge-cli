@@ -3,12 +3,16 @@ package template
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
 	"text/template"
 )
+
+//go:embed all:templates
+var templatesFS embed.FS
 
 // Engine provides template rendering capabilities.
 type Engine struct {
@@ -29,6 +33,7 @@ func NewEngine() *Engine {
 			"upper":      strings.ToUpper,
 			"lower":      strings.ToLower,
 			"title":      strings.Title,
+			"replace":    strings.ReplaceAll,
 		},
 	}
 }
@@ -56,6 +61,28 @@ func (e *Engine) RenderFile(path string, data interface{}) (string, error) {
 	}
 
 	return e.Render(string(content), data)
+}
+
+// RenderTemplate renders an embedded template file with the given data.
+func (e *Engine) RenderTemplate(templatePath string, data interface{}) (string, error) {
+	// Read from embedded filesystem
+	content, err := templatesFS.ReadFile("templates/" + templatePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read embedded template %s: %w", templatePath, err)
+	}
+
+	return e.Render(string(content), data)
+}
+
+// ReadEmbeddedFile reads an embedded file without template rendering
+func (e *Engine) ReadEmbeddedFile(templatePath string) ([]byte, error) {
+	// Read from embedded filesystem
+	content, err := templatesFS.ReadFile("templates/" + templatePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded file %s: %w", templatePath, err)
+	}
+
+	return content, nil
 }
 
 // RenderToFile renders a template and writes the result to a file.

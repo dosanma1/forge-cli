@@ -48,6 +48,48 @@ Examples:
 
 func init() {
 	generateCmd.AddCommand(generateServiceCmd)
+	generateCmd.AddCommand(generateFrontendCmd)
+}
+
+var generateFrontendCmd = &cobra.Command{
+	Use:   "frontend <name>",
+	Short: "Generate a new Angular frontend application",
+	Long: `Generate a new Angular frontend application with Forge patterns.
+
+This will create:
+- Angular workspace configuration (first app only)
+- Standalone Angular application
+- Tailwind CSS configuration
+- TypeScript configuration
+- Package.json with dependencies
+
+Examples:
+  forge generate frontend web-app
+  forge g frontend admin-portal`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGenerateFrontend,
+}
+
+func runGenerateFrontend(cmd *cobra.Command, args []string) error {
+	appName := args[0]
+
+	// Create generator
+	gen := generator.NewFrontendGenerator()
+
+	// Prepare options
+	opts := generator.GeneratorOptions{
+		OutputDir: ".",
+		Name:      appName,
+		DryRun:    false,
+	}
+
+	// Generate frontend
+	ctx := context.Background()
+	if err := gen.Generate(ctx, opts); err != nil {
+		return fmt.Errorf("failed to generate frontend: %w", err)
+	}
+
+	return nil
 }
 
 func runGenerateService(cmd *cobra.Command, args []string) error {

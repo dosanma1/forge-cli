@@ -12,9 +12,62 @@ const ConfigFileName = "forge.json"
 
 // Config represents the workspace configuration.
 type Config struct {
-	Version   string             `json:"version"`
-	Workspace WorkspaceMetadata  `json:"workspace"`
-	Projects  map[string]Project `json:"projects"`
+	Version        string                       `json:"version"`
+	Workspace      WorkspaceMetadata            `json:"workspace"`
+	Projects       map[string]Project           `json:"projects"`
+	Build          *BuildConfig                 `json:"build,omitempty"`
+	Environments   map[string]EnvironmentConfig `json:"environments,omitempty"`
+	Infrastructure *InfrastructureConfig        `json:"infrastructure,omitempty"`
+}
+
+// BuildConfig contains build-related configuration.
+type BuildConfig struct {
+	GoVersion   string          `json:"goVersion,omitempty"`
+	NodeVersion string          `json:"nodeVersion,omitempty"`
+	Registry    string          `json:"registry,omitempty"`
+	Cache       *CacheConfig    `json:"cache,omitempty"`
+	Parallel    *ParallelConfig `json:"parallel,omitempty"`
+}
+
+// InfrastructureConfig contains infrastructure configuration.
+type InfrastructureConfig struct {
+	Kubernetes       *KubernetesInfra `json:"kubernetes,omitempty"`
+	CloudRun         *CloudRunInfra   `json:"cloudrun,omitempty"`
+	DeploymentTarget string           `json:"deploymentTarget,omitempty"` // "kubernetes" | "cloudrun" | "both"
+}
+
+// KubernetesInfra contains Kubernetes infrastructure config.
+type KubernetesInfra struct {
+	Cluster   string `json:"cluster,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// CloudRunInfra contains Cloud Run infrastructure config.
+type CloudRunInfra struct {
+	Region  string `json:"region,omitempty"`
+	Project string `json:"project,omitempty"`
+}
+
+// EnvironmentConfig contains environment-specific deployment configuration.
+type EnvironmentConfig struct {
+	Name        string            `json:"name"`
+	Profile     string            `json:"profile,omitempty"`
+	Cluster     string            `json:"cluster,omitempty"`
+	Namespace   string            `json:"namespace,omitempty"`
+	Registry    string            `json:"registry,omitempty"`
+	Region      string            `json:"region,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Variables   map[string]string `json:"variables,omitempty"`
+}
+
+// CacheConfig contains build cache configuration.
+type CacheConfig struct {
+	RemoteURL string `json:"remoteUrl,omitempty"`
+}
+
+// ParallelConfig contains parallel build configuration.
+type ParallelConfig struct {
+	Workers int `json:"workers,omitempty"`
 }
 
 // WorkspaceMetadata contains workspace-level metadata.
@@ -51,10 +104,26 @@ type KubernetesConfig struct {
 
 // Project represents a project in the workspace.
 type Project struct {
-	Name string      `json:"name"`
-	Type ProjectType `json:"type"`
-	Root string      `json:"root"`
-	Tags []string    `json:"tags,omitempty"`
+	Name         string                              `json:"name"`
+	Type         ProjectType                         `json:"type"`
+	Root         string                              `json:"root"`
+	Tags         []string                            `json:"tags,omitempty"`
+	Port         int                                 `json:"port,omitempty"`
+	Environments map[string]ProjectEnvironmentConfig `json:"environments,omitempty"`
+}
+
+// ProjectEnvironmentConfig contains per-project environment configuration.
+type ProjectEnvironmentConfig struct {
+	Replicas         int                     `json:"replicas,omitempty"`
+	Resources        *ProjectResourcesConfig `json:"resources,omitempty"`
+	Variables        map[string]string       `json:"variables,omitempty"`
+	DeploymentTarget string                  `json:"deploymentTarget,omitempty"` // Override workspace-level deployment target
+}
+
+// ProjectResourcesConfig contains resource limits/requests.
+type ProjectResourcesConfig struct {
+	Memory string `json:"memory,omitempty"`
+	CPU    string `json:"cpu,omitempty"`
 }
 
 // ProjectType represents the type of project.

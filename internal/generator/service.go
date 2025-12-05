@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/dosanma1/forge-cli/internal/template"
@@ -73,180 +74,159 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		githubOrg = config.Workspace.GitHub.Org
 	}
 
+	dockerRegistry := "gcr.io/your-project"
+	if config.Workspace.Docker != nil {
+		dockerRegistry = config.Workspace.Docker.Registry
+	}
+
 	data := map[string]interface{}{
 		"ServiceName":       serviceName,
 		"ServiceNamePascal": template.Pascalize(serviceName),
 		"ServiceNameCamel":  template.Camelize(serviceName),
-		"ModulePath":        fmt.Sprintf("%s/%s", githubOrg, config.Workspace.Name),
+		"ModulePath":        fmt.Sprintf("%s/%s/backend/services/%s", githubOrg, config.Workspace.Name, serviceName),
+		"WorkspaceName":     config.Workspace.Name,
+		"GitHubOrg":         githubOrg,
+		"Registry":          dockerRegistry,
+		"ProjectName":       config.Workspace.Name,
 	}
 
-	// Create main.go
-	mainTemplate := `package main
+	// Generate directory structure
+	dirs := []string{
+		"cmd/server",
+		"cmd/migrator",
+		"internal",
+		"pkg/api",
+		"pkg/model",
+		"pkg/proto",
+		"test",
+		"deploy/helm",
+		"deploy/cloudrun",
+	}
 
-import (
-	"context"
-	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/dosanma1/forge/pkg/config"
-	"github.com/dosanma1/forge/pkg/http"
-	"github.com/dosanma1/forge/pkg/log"
-	"github.com/dosanma1/forge/pkg/observability"
-)
-
-func main() {
-	// Initialize logger
-	logger := log.NewLogger("{{.ServiceName}}", log.LevelInfo)
-	
-	// Load configuration
-	cfg := config.NewEnvConfig("{{.ServiceNamePascal | upper}}")
-	port := cfg.GetInt("PORT", 8080)
-	
-	// Initialize observability
-	tracer := observability.NewTracer("{{.ServiceName}}", "1.0.0")
-	defer tracer.Shutdown(context.Background())
-	
-	// Create router
-	router := http.NewRouter()
-	
-	// Register middleware
-	router.Use(http.LoggingMiddleware(logger))
-	router.Use(http.RecoveryMiddleware(logger))
-	router.Use(http.CORSMiddleware(http.CORSConfig{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
-	}))
-	
-	// Register routes
-	registerRoutes(router, logger, tracer)
-	
-	// Start server
-	addr := fmt.Sprintf(":%d", port)
-	logger.Info("Starting server", "addr", addr)
-	
-	// Graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	
-	go func() {
-		if err := router.Start(addr); err != nil {
-			logger.Error("Server failed", "error", err)
-			os.Exit(1)
+	for _, dir := range dirs {
+		dirPath := filepath.Join(serviceDir, dir)
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
-	}()
-	
-	<-quit
-	logger.Info("Shutting down server...")
-	
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	
-	if err := router.Shutdown(ctx); err != nil {
-		logger.Error("Server shutdown failed", "error", err)
-	}
-}
-
-func registerRoutes(router *http.Router, logger *log.Logger, tracer *observability.Tracer) {
-	// Health check
-	router.GET("/health", func(ctx *http.Context) error {
-		return ctx.JSON(200, map[string]string{"status": "ok"})
-	})
-	
-	// API v1 group
-	v1 := router.Group("/api/v1")
-	{
-		// TODO: Add your routes here
-		v1.GET("/example", func(ctx *http.Context) error {
-			return ctx.Success("{{.ServiceNamePascal}} is running")
-		})
-	}
-}
-`
-
-	mainPath := filepath.Join(serviceDir, "main.go")
-	if err := g.engine.RenderToFile(mainTemplate, data, mainPath); err != nil {
-		return fmt.Errorf("failed to create main.go: %w", err)
 	}
 
-	// Create go.mod
-	modTemplate := `module {{.ModulePath}}/backend/services/{{.ServiceName}}
-
-go 1.23
-
-require github.com/dosanma1/forge v1.0.0
-`
-
-	modPath := filepath.Join(serviceDir, "go.mod")
-	if err := g.engine.RenderToFile(modTemplate, data, modPath); err != nil {
-		return fmt.Errorf("failed to create go.mod: %w", err)
+	// Generate root files
+	rootTemplates := map[string]string{
+		"go.mod":        "service/go.mod.tmpl",
+		"BUILD.bazel":   "service/BUILD.bazel.tmpl",
+		"README.md":     "service/README.md.tmpl",
+		"Dockerfile":    "service/Dockerfile.tmpl",
+		"skaffold.yaml": "service/skaffold.yaml.tmpl",
 	}
 
-	// Create Dockerfile
-	dockerfileContent := `FROM golang:1.23-alpine AS builder
+	for filename, templatePath := range rootTemplates {
+		content, err := g.engine.RenderTemplate(templatePath, data)
+		if err != nil {
+			return fmt.Errorf("failed to render %s: %w", filename, err)
+		}
 
-WORKDIR /build
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o service .
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /app
-COPY --from=builder /build/service .
-EXPOSE 8080
-CMD ["./service"]
-`
-
-	dockerfilePath := filepath.Join(serviceDir, "Dockerfile")
-	if err := os.WriteFile(dockerfilePath, []byte(dockerfileContent), 0644); err != nil {
-		return fmt.Errorf("failed to create Dockerfile: %w", err)
+		filePath := filepath.Join(serviceDir, filename)
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
 	}
 
-	// Create README.md
-	readmeTemplate := `# {{.ServiceNamePascal}}
+	// Generate cmd/server files
+	cmdServerTemplates := map[string]string{
+		"cmd/server/main.go":       "service/cmd/server/main.go.tmpl",
+		"cmd/server/BUILD.bazel":   "service/cmd/server/BUILD.bazel.tmpl",
+		"cmd/migrator/doc.go":      "service/cmd/migrator/doc.go.tmpl",
+		"cmd/migrator/BUILD.bazel": "service/cmd/migrator/BUILD.bazel.tmpl",
+	}
 
-A Forge-based microservice.
+	for filename, templatePath := range cmdServerTemplates {
+		content, err := g.engine.RenderTemplate(templatePath, data)
+		if err != nil {
+			return fmt.Errorf("failed to render %s: %w", filename, err)
+		}
 
-## Running Locally
+		filePath := filepath.Join(serviceDir, filename)
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
 
-` + "```bash" + `
-# Install dependencies
-go mod tidy
+	// Generate package files (internal, pkg/*)
+	pkgTemplates := map[string]string{
+		"internal/doc.go":       "service/internal/doc.go.tmpl",
+		"internal/BUILD.bazel":  "service/internal/BUILD.bazel.tmpl",
+		"pkg/api/doc.go":        "service/pkg/api/doc.go.tmpl",
+		"pkg/api/BUILD.bazel":   "service/pkg/api/BUILD.bazel.tmpl",
+		"pkg/model/doc.go":      "service/pkg/model/doc.go.tmpl",
+		"pkg/model/BUILD.bazel": "service/pkg/model/BUILD.bazel.tmpl",
+		"pkg/proto/doc.go":      "service/pkg/proto/doc.go.tmpl",
+		"pkg/proto/BUILD.bazel": "service/pkg/proto/BUILD.bazel.tmpl",
+	}
 
-# Run service
-go run main.go
+	for filename, templatePath := range pkgTemplates {
+		content, err := g.engine.RenderTemplate(templatePath, data)
+		if err != nil {
+			return fmt.Errorf("failed to render %s: %w", filename, err)
+		}
 
-# Run with environment variables
-{{.ServiceNamePascal | upper}}_PORT=9090 go run main.go
-` + "```" + `
+		filePath := filepath.Join(serviceDir, filename)
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
 
-## Environment Variables
+	// Generate test and deploy README files
+	readmeTemplates := map[string]string{
+		"test/README.md":   "service/test/README.md.tmpl",
+		"deploy/README.md": "service/deploy/README.md.tmpl",
+	}
 
-- ` + "`{{.ServiceNamePascal | upper}}_PORT`" + ` - HTTP server port (default: 8080)
+	for filename, templatePath := range readmeTemplates {
+		content, err := g.engine.RenderTemplate(templatePath, data)
+		if err != nil {
+			return fmt.Errorf("failed to render %s: %w", filename, err)
+		}
 
-## Endpoints
+		filePath := filepath.Join(serviceDir, filename)
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
 
-- ` + "`GET /health`" + ` - Health check
-- ` + "`GET /api/v1/example`" + ` - Example endpoint
+	// Generate Helm values files
+	helmTemplates := map[string]string{
+		"deploy/helm/values.yaml":      "service/deploy/helm/values.yaml.tmpl",
+		"deploy/helm/values-dev.yaml":  "service/deploy/helm/values-dev.yaml.tmpl",
+		"deploy/helm/values-prod.yaml": "service/deploy/helm/values-prod.yaml.tmpl",
+	}
 
-## Building
+	for filename, templatePath := range helmTemplates {
+		content, err := g.engine.RenderTemplate(templatePath, data)
+		if err != nil {
+			return fmt.Errorf("failed to render %s: %w", filename, err)
+		}
 
-` + "```bash" + `
-# Build binary
-go build -o {{.ServiceName}} .
+		filePath := filepath.Join(serviceDir, filename)
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
+	}
 
-# Build Docker image
-docker build -t {{.ServiceName}}:latest .
-` + "```" + `
-`
+	// Generate Cloud Run deployment file
+	cloudRunTemplate := map[string]string{
+		"deploy/cloudrun/service.yaml": "service/deploy/cloudrun/service.yaml.tmpl",
+	}
 
-	readmePath := filepath.Join(serviceDir, "README.md")
-	if err := g.engine.RenderToFile(readmeTemplate, data, readmePath); err != nil {
-		return fmt.Errorf("failed to create README.md: %w", err)
+	for filename, templatePath := range cloudRunTemplate {
+		content, err := g.engine.RenderTemplate(templatePath, data)
+		if err != nil {
+			return fmt.Errorf("failed to render %s: %w", filename, err)
+		}
+
+		filePath := filepath.Join(serviceDir, filename)
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", filename, err)
+		}
 	}
 
 	// Add project to workspace config
@@ -265,10 +245,157 @@ docker build -t {{.ServiceName}}:latest .
 		return fmt.Errorf("failed to save workspace config: %w", err)
 	}
 
+	// Run go mod tidy automatically
+	fmt.Printf("📦 Running go mod tidy for %s...\n", serviceName)
+	if err := g.runGoModTidy(serviceDir); err != nil {
+		// Warn but don't fail - user can run manually
+		fmt.Printf("⚠️  Warning: go mod tidy failed: %v\n", err)
+		fmt.Printf("   Run 'cd %s && go mod tidy' manually\n", serviceDir)
+	} else {
+		fmt.Println("✓ Dependencies synchronized")
+	}
+
+	// Update root skaffold.yaml to include this service
+	if err := g.updateRootSkaffold(opts.OutputDir, config); err != nil {
+		return fmt.Errorf("failed to update root skaffold.yaml: %w", err)
+	}
+
+	// Update MODULE.bazel to include this service's go.mod
+	if err := g.updateModuleBazel(opts.OutputDir, config); err != nil {
+		return fmt.Errorf("failed to update MODULE.bazel: %w", err)
+	}
+
+	// Update go.work to include this service
+	if err := g.updateGoWork(opts.OutputDir, config); err != nil {
+		return fmt.Errorf("failed to update go.work: %w", err)
+	}
+
 	fmt.Printf("✓ Service %q created successfully\n", serviceName)
 	fmt.Printf("✓ Location: %s\n", serviceDir)
 	fmt.Printf("✓ Run 'cd %s && go mod tidy' to install dependencies\n", serviceDir)
-	fmt.Printf("✓ Run 'cd %s && go run main.go' to start the service\n", serviceDir)
+	fmt.Printf("✓ Run 'forge build %s' to build the service\n", serviceName)
+	fmt.Printf("✓ Run 'forge test %s' to run tests\n", serviceName)
+	fmt.Printf("✓ Run 'forge run %s' to start the service\n", serviceName)
 
 	return nil
+}
+
+// updateRootSkaffold updates the root skaffold.yaml to include the new service
+func (g *ServiceGenerator) updateRootSkaffold(workspaceDir string, config *workspace.Config) error {
+	// Collect all services
+	var services []map[string]interface{}
+	for _, project := range config.Projects {
+		if project.Type == workspace.ProjectTypeGoService {
+			services = append(services, map[string]interface{}{
+				"Name": project.Name,
+			})
+		}
+	}
+
+	registry := "gcr.io/your-project"
+	if config.Workspace.Docker != nil {
+		registry = config.Workspace.Docker.Registry
+	}
+
+	data := map[string]interface{}{
+		"ProjectName":   config.Workspace.Name,
+		"Services":      services,
+		"HasAPIGateway": false,
+		"Registry":      registry,
+	}
+
+	content, err := g.engine.RenderTemplate("skaffold.yaml.tmpl", data)
+	if err != nil {
+		return fmt.Errorf("failed to render skaffold.yaml: %w", err)
+	}
+
+	skaffoldPath := filepath.Join(workspaceDir, "skaffold.yaml")
+	if err := os.WriteFile(skaffoldPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write skaffold.yaml: %w", err)
+	}
+
+	return nil
+}
+
+// updateModuleBazel updates MODULE.bazel to include the new service's go.mod
+func (g *ServiceGenerator) updateModuleBazel(workspaceDir string, config *workspace.Config) error {
+	// Collect all services
+	var services []map[string]interface{}
+	for _, project := range config.Projects {
+		if project.Type == workspace.ProjectTypeGoService {
+			services = append(services, map[string]interface{}{
+				"Name": project.Name,
+			})
+		}
+	}
+
+	// Check if frontend exists
+	hasFrontend := false
+	for _, project := range config.Projects {
+		if project.Type == workspace.ProjectTypeAngularApp {
+			hasFrontend = true
+			break
+		}
+	}
+
+	data := map[string]interface{}{
+		"ProjectName": config.Workspace.Name,
+		"Version":     "0.1.0",
+		"GoVersion":   "1.23",
+		"NodeVersion": "20.18.1",
+		"HasFrontend": hasFrontend,
+		"Services":    services,
+	}
+
+	content, err := g.engine.RenderTemplate("bazel/MODULE.bazel.tmpl", data)
+	if err != nil {
+		return fmt.Errorf("failed to render MODULE.bazel: %w", err)
+	}
+
+	modulePath := filepath.Join(workspaceDir, "MODULE.bazel")
+	if err := os.WriteFile(modulePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write MODULE.bazel: %w", err)
+	}
+
+	return nil
+}
+
+// updateGoWork updates go.work to include the new service
+func (g *ServiceGenerator) updateGoWork(workspaceDir string, config *workspace.Config) error {
+	// Collect all services
+	var services []map[string]interface{}
+	for _, project := range config.Projects {
+		if project.Type == workspace.ProjectTypeGoService {
+			services = append(services, map[string]interface{}{
+				"Name": project.Name,
+			})
+		}
+	}
+
+	data := map[string]interface{}{
+		"GoVersion": "1.23",
+		"Services":  services,
+	}
+
+	content, err := g.engine.RenderTemplate("bazel/go.work.tmpl", data)
+	if err != nil {
+		return fmt.Errorf("failed to render go.work: %w", err)
+	}
+
+	goWorkPath := filepath.Join(workspaceDir, "go.work")
+	if err := os.WriteFile(goWorkPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write go.work: %w", err)
+	}
+
+	return nil
+}
+
+// runGoModTidy runs go mod tidy in the specified directory
+func (g *ServiceGenerator) runGoModTidy(serviceDir string) error {
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = serviceDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
 }

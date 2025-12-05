@@ -1,0 +1,6 @@
+go {{.GoVersion}}
+{{if .Services}}
+{{range .Services -}}
+use ./backend/services/{{.Name}}
+{{end -}}
+{{end -}}

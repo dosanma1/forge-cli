@@ -1,0 +1,15 @@
+"""{{.ServiceName}} service BUILD configuration"""
+
+load("@gazelle//:def.bzl", "gazelle")
+
+package(default_visibility = ["//visibility:public"])
+
+# Gazelle configuration
+# gazelle:prefix {{.ModulePath}}
+gazelle(name = "gazelle")
+
+# Export go.mod for dependency management
+exports_files([
+    "go.mod",
+    "go.sum",
+])

@@ -1,0 +1,10 @@
+"""API package BUILD configuration"""
+
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "api",
+    srcs = ["doc.go"],
+    importpath = "{{.ModulePath}}/pkg/api",
+    visibility = ["//visibility:public"],
+)

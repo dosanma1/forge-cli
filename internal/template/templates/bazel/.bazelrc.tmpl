@@ -1,0 +1,47 @@
+# Common Bazel configuration
+common --enable_bzlmod
+
+# Build settings
+build --incompatible_disallow_empty_glob
+build --incompatible_strict_action_env
+build --verbose_failures
+build --color=yes
+build --jobs=auto
+build --show_progress
+build --show_progress_rate_limit=0.03
+
+# Test settings
+test --test_output=errors
+test --cache_test_results=auto
+
+# JavaScript/TypeScript configuration
+build --nolegacy_external_runfiles
+fetch --nolegacy_external_runfiles
+
+# Local disk cache
+build --disk_cache=~/.cache/bazel
+
+# Environment-specific configurations
+
+# Local development (default) - fast builds, no optimization
+build:local --compilation_mode=fastbuild
+build:local --define=ENV=local
+
+# Development - some optimization, keep debug info
+build:dev --compilation_mode=dbg
+build:dev --define=ENV=dev
+build:dev --strip=never
+
+# Production - full optimization, strip debug info
+build:prod --compilation_mode=opt
+build:prod --define=ENV=prod
+build:prod --strip=always
+build:prod --stamp
+
+# CI-specific configurations
+build:ci --show_timestamps
+build:ci --announce_rc
+build:ci --remote_upload_local_results=true
+build:ci --remote_download_toplevel
+build:ci --jobs=auto
+build:ci --test_output=errors

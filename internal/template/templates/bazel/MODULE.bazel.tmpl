@@ -1,0 +1,66 @@
+"""{{.ProjectName}} - Bazel Module Configuration"""
+
+module(
+    name = "{{replace .ProjectName "-" "_"}}",
+    version = "{{.Version}}",
+)
+
+# Core Bazel dependencies
+bazel_dep(name = "bazel_skylib", version = "1.8.1")
+bazel_dep(name = "rules_pkg", version = "1.0.1")
+
+# OCI (container) support
+bazel_dep(name = "rules_oci", version = "2.0.0")
+
+# Go support (official Bazel rules)
+bazel_dep(name = "rules_go", version = "0.50.1")
+bazel_dep(name = "gazelle", version = "0.39.1")
+
+{{if .HasFrontend}}
+# Node.js and JavaScript/TypeScript support (Aspect Build)
+bazel_dep(name = "rules_nodejs", version = "6.3.2")
+bazel_dep(name = "aspect_rules_js", version = "2.8.2")
+bazel_dep(name = "aspect_rules_ts", version = "3.7.1")
+bazel_dep(name = "aspect_rules_esbuild", version = "0.24.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.21.2")
+{{end}}
+
+# OCI base images
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+oci.pull(
+    name = "distroless_base",
+    digest = "sha256:ccaef5ee2f1850270d453fdf700a5392534f8d1a8ca2acda391fbb6a06b81c86",
+    image = "gcr.io/distroless/base",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64",
+    ],
+)
+use_repo(oci, "distroless_base")
+
+# Go toolchain setup
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.23.4")
+
+# Go dependencies from go.mod files
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+{{range .Services}}
+go_deps.from_file(go_mod = "//backend/services/{{.Name}}:go.mod")
+{{end}}
+use_repo(go_deps)
+
+{{if .HasFrontend}}
+# Node.js toolchain setup
+node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
+node.toolchain(node_version = "{{.NodeVersion}}")
+
+# npm setup
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm", dev_dependency = True)
+npm.npm_translate_lock(
+    name = "npm",
+    npmrc = "//frontend:.npmrc",
+    pnpm_lock = "//frontend:pnpm-lock.yaml",
+    verify_node_modules_ignored = "//frontend:.bazelignore",
+)
+use_repo(npm, "npm")
+{{end}}

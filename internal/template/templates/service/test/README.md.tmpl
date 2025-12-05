@@ -1,0 +1,18 @@
+# Test Directory
+
+This directory contains integration and end-to-end tests for {{.ServiceName}}.
+
+## Structure
+
+- `integration/` - Integration tests
+- `e2e/` - End-to-end tests
+
+## Running Tests
+
+```bash
+# Run all tests
+bazel test //...
+
+# Run specific test
+bazel test //test/integration:integration_test
+```

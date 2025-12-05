@@ -1,0 +1,82 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: {{.ProjectName}}-microservices
+
+# Platform auto-detection: Skaffold automatically detects the target platform based on
+# the Kubernetes cluster's node architecture (linux/arm64 for Apple Silicon, linux/amd64 for Intel).
+# This ensures images are built for the correct architecture without manual configuration.
+
+requires:
+{{range .Services -}}
+- path: backend/services/{{.Name}}
+{{end -}}
+{{if .HasAPIGateway -}}
+- path: infra/api-gateway
+{{end -}}
+
+build:
+  local:
+    push: false
+    useDockerCLI: true
+    useBuildkit: true
+    concurrency: 0
+  tagPolicy:
+    gitCommit:
+      variant: AbbrevCommitSha
+
+profiles:
+  - name: local
+    activation:
+      - kubeContext: kind-{{.ProjectName}}
+    build:
+      local:
+        push: false
+  
+  - name: dev
+    build:
+      local:
+        push: true
+    deploy:
+      helm:
+        releases:
+{{- range .Services}}
+          - name: {{.Name}}
+            chartPath: infra/helm/service
+            namespace: dev
+            setValues:
+              service.name: {{.Name}}
+              image.repository: {{$.Registry}}/{{.Name}}
+{{- end}}
+
+  - name: staging
+    build:
+      local:
+        push: true
+    deploy:
+      helm:
+        releases:
+{{- range .Services}}
+          - name: {{.Name}}
+            chartPath: infra/helm/service
+            namespace: staging
+            setValues:
+              service.name: {{.Name}}
+              image.repository: {{$.Registry}}/{{.Name}}
+{{- end}}
+
+  - name: prod
+    build:
+      local:
+        push: true
+    deploy:
+      helm:
+        releases:
+{{- range .Services}}
+          - name: {{.Name}}
+            chartPath: infra/helm/service
+            namespace: prod
+            setValues:
+              service.name: {{.Name}}
+              image.repository: {{$.Registry}}/{{.Name}}
+{{- end}}

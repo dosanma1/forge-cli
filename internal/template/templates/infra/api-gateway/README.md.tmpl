@@ -1,0 +1,56 @@
+# API Gateway
+
+This Helm chart configures the API Gateway for {{.WorkspaceName}}, including:
+
+- Ingress routing to backend services
+- TLS certificate management
+- CORS configuration
+- Health check endpoints
+
+## Configuration
+
+### Add a Service
+
+When you create a new service with `forge service create <name>`, it will be automatically added to the API Gateway with:
+
+```yaml
+services:
+  <service-name>:
+    enabled: false  # Enable this when you're ready to expose the service
+    name: <service-name>
+    port: 80
+    paths: []  # Add your API paths here
+```
+
+### Example Service Configuration
+
+```yaml
+services:
+  my-service:
+    enabled: true
+    name: my-service
+    port: 80
+    paths:
+      - path: /api/my-service
+        pathType: Prefix
+```
+
+## Deployment
+
+```bash
+# Local development
+forge deploy --env=local
+
+# Development environment
+forge deploy --env=dev
+
+# Production environment
+forge deploy --env=prod
+```
+
+## Environment Files
+
+- `envs/local.yaml` - Local development configuration
+- `envs/dev.yaml` - Development environment configuration
+- `envs/staging.yaml` - Staging environment configuration
+- `envs/prod.yaml` - Production environment configuration

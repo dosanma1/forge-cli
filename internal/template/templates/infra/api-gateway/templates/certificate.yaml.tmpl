@@ -1,0 +1,31 @@
+{{`{{- if and .Values.apiGateway.enabled .Values.apiGateway.tls.enabled -}}
+{{- if .Values.apiGateway.tls.selfSigned }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.apiGateway.tls.secretName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+data:
+  tls.crt: {{ include "api-gateway.selfsigned.cert" . }}
+  tls.key: {{ include "api-gateway.selfsigned.key" . }}
+type: kubernetes.io/tls
+{{- else if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "api-gateway.fullname" . }}-certificate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.apiGateway.tls.secretName }}
+  issuerRef:
+    name: {{ include "api-gateway.fullname" . }}-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.apiGateway.domain }}
+{{- end }}
+{{- end }}
+`}}

@@ -1,0 +1,20 @@
+# Deployment Directory
+
+This directory contains deployment configurations for {{.ServiceName}}.
+
+## Structure
+
+- `helm/` - Kubernetes Helm charts
+- `cloudrun/` - Google Cloud Run configurations
+
+## Deployment
+
+### Kubernetes
+```bash
+forge deploy --target=kubernetes --env=dev
+```
+
+### Cloud Run
+```bash
+forge deploy --target=cloudrun --env=dev
+```

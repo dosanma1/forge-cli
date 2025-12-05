@@ -1,0 +1,10 @@
+"""Proto package BUILD configuration"""
+
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "proto",
+    srcs = ["doc.go"],
+    importpath = "{{.ModulePath}}/pkg/proto",
+    visibility = ["//visibility:public"],
+)

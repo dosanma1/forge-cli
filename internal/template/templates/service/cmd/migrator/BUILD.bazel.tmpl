@@ -1,0 +1,10 @@
+"""Migrator BUILD configuration"""
+
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "migrator",
+    srcs = ["doc.go"],
+    importpath = "{{.ModulePath}}/cmd/migrator",
+    visibility = ["//visibility:public"],
+)

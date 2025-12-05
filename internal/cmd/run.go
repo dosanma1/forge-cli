@@ -1,5 +1,4 @@
 package cmd
-package cmd
 
 import (
 	"context"
@@ -16,50 +15,48 @@ var (
 var runCmd = &cobra.Command{
 	Use:   "run <service>",
 	Short: "Run a service locally",
-	Long: `Run a service locally for development.
+	Long: `Run a service in your workspace locally.
 
 Examples:
-  forge run api-server        # Run the api-server service
-  forge run worker --verbose  # Run with detailed output`,
+  forge run api-server        # Run api-server service
+  forge run --verbose worker  # Run with detailed output`,
+	Args: cobra.ExactArgs(1),
+	RunE: runRun,
+}
 
+func init() {
+	rootCmd.AddCommand(runCmd)
+	runCmd.Flags().BoolVarP(&runVerbose, "verbose", "v", false, "Show detailed output")
+}
 
+func runRun(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+	service := args[0]
 
+	// Get workspace root
+	workspaceRoot, err := findWorkspaceRoot()
+	if err != nil {
+		return fmt.Errorf("not in a forge workspace: %w", err)
+	}
 
+	// Create Bazel executor
+	executor, err := bazel.NewExecutor(workspaceRoot, runVerbose)
+	if err != nil {
+		return err
+	}
 
+	// Convert service to target
+	target := serviceToTarget(service)
 
+	fmt.Printf("🚀 Running service: %s\n", service)
 
+	// Execute run
+	if err := executor.Run(ctx, target); err != nil {
+		// Translate Bazel error to user-friendly message
+		translator := bazel.NewErrorTranslator()
+		friendlyError := translator.Translate(err.Error())
+		return fmt.Errorf("❌ Run failed:\n%s", friendlyError)
+	}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	return nil	}		return fmt.Errorf("❌ Failed to run service:\n%s", friendlyError)		friendlyError := translator.Translate(err.Error())		translator := bazel.NewErrorTranslator()	if err := executor.Run(ctx, target); err != nil {	// Execute run	fmt.Println()	fmt.Println("   Press Ctrl+C to stop")	fmt.Printf("🚀 Starting %s...\n", serviceName)	target := fmt.Sprintf("//backend/services/%s/cmd/server:server", serviceName)	// Convert service name to Bazel run target	}		return err	if err != nil {	executor, err := bazel.NewExecutor(workspaceRoot, runVerbose)	// Create Bazel executor	}		return fmt.Errorf("not in a forge workspace: %w", err)	if err != nil {	workspaceRoot, err := findWorkspaceRoot()	// Get workspace root	serviceName := args[0]	ctx := context.Background()func runRun(cmd *cobra.Command, args []string) error {}	runCmd.Flags().BoolVarP(&runVerbose, "verbose", "v", false, "Show detailed output")	rootCmd.AddCommand(runCmd)func init() {}	RunE: runRun,	Args: cobra.ExactArgs(1),
+	return nil
+}

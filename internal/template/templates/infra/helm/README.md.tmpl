@@ -1,0 +1,48 @@
+# Helm Charts
+
+This directory contains Helm charts for deploying services to Kubernetes.
+
+## Structure
+
+- `service/` - Base Helm chart template for microservices
+- Each service can override values using service-specific `values.yaml` files
+
+## Deploying Services
+
+Deploy services using Skaffold profiles:
+
+```bash
+# Deploy to local Kind cluster
+skaffold run --profile=local
+
+# Deploy to dev environment
+skaffold run --profile=dev
+
+# Deploy to production
+skaffold run --profile=prod
+```
+
+## Manual Deployment
+
+To manually deploy a service using Helm:
+
+```bash
+helm install <service-name> ./infra/helm/service \
+  --set service.name=<service-name> \
+  --set image.repository=<registry>/<service-name> \
+  --set image.tag=<version> \
+  --namespace=<namespace>
+```
+
+## Chart Development
+
+To add a new Helm chart:
+
+1. Create chart structure in this directory
+2. Update `skaffold.yaml` to reference the chart
+3. Configure values in deployment profiles
+
+## Resources
+
+- [Helm Documentation](https://helm.sh/docs/)
+- [Helm Best Practices](https://helm.sh/docs/chart_best_practices/)

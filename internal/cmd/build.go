@@ -7,37 +7,53 @@ import (
 	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/bazel"
+	"github.com/dosanma1/forge-cli/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 var (
 	buildVerbose bool
-	buildPush    bool
+	buildConfig  string
 	buildService string
 )
 
 var buildCmd = &cobra.Command{
 	Use:   "build [service...]",
-	Short: "Build services",
-	Long: `Build one or more services in your workspace.
+	Short: "Build services using Bazel",
+	Long: `Build one or more services in your workspace using Bazel.
+
+This command builds your backend and frontend code only. 
+Docker images and deployment are handled by 'forge deploy'.
+
+Environments (--config):
+  local   - Fast builds, no optimization (default)
+  dev     - Some optimization, source maps
+  prod    - Full optimization, no debug info
 
 Examples:
-  forge build                    # Build all services
-  forge build api-server         # Build specific service
-  forge build api-server worker  # Build multiple services
-  forge build --push             # Build and push to registry`,
+  forge build                        # Build all (local config)
+  forge build --config=prod          # Build all for production
+  forge build api-server             # Build specific service
+  forge build api-server worker      # Build multiple services
+  forge build --config=dev --verbose # Dev build with details`,
 	RunE: runBuild,
 }
 
 func init() {
 	rootCmd.AddCommand(buildCmd)
 	buildCmd.Flags().BoolVarP(&buildVerbose, "verbose", "v", false, "Show detailed build output")
-	buildCmd.Flags().BoolVar(&buildPush, "push", false, "Push images to registry after build")
+	buildCmd.Flags().StringVarP(&buildConfig, "config", "c", "local", "Build configuration (local|dev|prod)")
 	buildCmd.Flags().StringVarP(&buildService, "service", "s", "", "Build specific service")
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+
+	// Validate config
+	validConfigs := map[string]bool{"local": true, "dev": true, "prod": true}
+	if !validConfigs[buildConfig] {
+		return fmt.Errorf("invalid config: %s (must be local, dev, or prod)", buildConfig)
+	}
 
 	// Get workspace root
 	workspaceRoot, err := findWorkspaceRoot()
@@ -45,7 +61,13 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not in a forge workspace: %w", err)
 	}
 
-	// Create Bazel executor
+	// Load workspace config to check for remote cache
+	config, err := workspace.LoadConfig(workspaceRoot)
+	if err != nil {
+		return fmt.Errorf("failed to load workspace config: %w", err)
+	}
+
+	// Create Bazel executor with config
 	executor, err := bazel.NewExecutor(workspaceRoot, buildVerbose)
 	if err != nil {
 		return err
@@ -67,31 +89,51 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		targets = append(targets, "//...")
 	}
 
-	// Show user-friendly message
-	if buildVerbose {
-		fmt.Printf("🔨 Building targets: %s\n", strings.Join(targets, ", "))
-	} else {
-		serviceNames := extractServiceNames(args)
-		if len(serviceNames) == 0 {
-			fmt.Println("🔨 Building all services...")
-		} else {
-			fmt.Printf("🔨 Building: %s\n", strings.Join(serviceNames, ", "))
+	// Build Bazel args with environment config
+	var bazelFlags []string
+	bazelFlags = append(bazelFlags, fmt.Sprintf("--config=%s", buildConfig))
+
+	// Add remote cache if configured
+	if config.Build != nil && config.Build.Cache != nil && config.Build.Cache.RemoteURL != "" {
+		bazelFlags = append(bazelFlags, fmt.Sprintf("--remote_cache=%s", config.Build.Cache.RemoteURL))
+		if buildVerbose {
+			fmt.Printf("  Using remote cache: %s\n", config.Build.Cache.RemoteURL)
 		}
 	}
 
-	// Execute build
-	if err := executor.Build(ctx, targets); err != nil {
+	// Add parallel workers if configured
+	if config.Build != nil && config.Build.Parallel != nil && config.Build.Parallel.Workers > 0 {
+		bazelFlags = append(bazelFlags, fmt.Sprintf("--jobs=%d", config.Build.Parallel.Workers))
+		if buildVerbose {
+			fmt.Printf("  Using %d parallel workers\n", config.Build.Parallel.Workers)
+		}
+	}
+
+	// Show user-friendly message
+	configEmoji := map[string]string{
+		"local": "🏠",
+		"dev":   "🔧",
+		"prod":  "🚀",
+	}
+	emoji := configEmoji[buildConfig]
+
+	if buildVerbose {
+		fmt.Printf("%s Building with config '%s': %s\n", emoji, buildConfig, strings.Join(targets, ", "))
+	} else {
+		serviceNames := extractServiceNames(args)
+		if len(serviceNames) == 0 {
+			fmt.Printf("%s Building all services [%s]...\n", emoji, buildConfig)
+		} else {
+			fmt.Printf("%s Building: %s [%s]\n", emoji, strings.Join(serviceNames, ", "), buildConfig)
+		}
+	}
+
+	// Execute build via Bazel
+	if err := executor.BuildWithFlags(ctx, bazelFlags, targets); err != nil {
 		// Translate Bazel error to user-friendly message
 		translator := bazel.NewErrorTranslator()
 		friendlyError := translator.Translate(err.Error())
 		return fmt.Errorf("❌ Build failed:\n%s", friendlyError)
-	}
-
-	// Push if requested
-	if buildPush {
-		fmt.Println("📤 Pushing images to registry...")
-		// TODO: Implement image push
-		fmt.Println("⚠️  Push not yet implemented")
 	}
 
 	fmt.Println("✅ Build completed successfully!")
@@ -115,15 +157,15 @@ func extractServiceNames(args []string) []string {
 
 // findWorkspaceRoot finds the root of the forge workspace.
 func findWorkspaceRoot() (string, error) {
-	// Look for .forge.yaml or MODULE.bazel
+	// Look for forge.json or MODULE.bazel
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 
 	for {
-		// Check for .forge.yaml
-		if _, err := os.Stat(fmt.Sprintf("%s/.forge.yaml", dir)); err == nil {
+		// Check for forge.json
+		if _, err := os.Stat(fmt.Sprintf("%s/forge.json", dir)); err == nil {
 			return dir, nil
 		}
 
@@ -140,5 +182,5 @@ func findWorkspaceRoot() (string, error) {
 		dir = parent
 	}
 
-	return "", fmt.Errorf("not a forge workspace (no .forge.yaml found)")
+	return "", fmt.Errorf("not a forge workspace (no forge.json found)")
 }

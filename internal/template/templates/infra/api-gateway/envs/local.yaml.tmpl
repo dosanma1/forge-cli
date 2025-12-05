@@ -1,0 +1,14 @@
+# Local environment configuration
+apiGateway:
+  domain: "{{.WorkspaceName}}.local"
+  tls:
+    enabled: false
+
+# Disable ingress-nginx dependency (already installed in cluster)
+ingress-nginx:
+  enabled: false
+
+certManager:
+  enabled: false
+  acme:
+    enabled: false

@@ -1,0 +1,96 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: {{.ServiceName}}
+
+# Platform auto-detection: Skaffold automatically detects the target platform based on
+# the Kubernetes cluster's node architecture (linux/arm64 for Apple Silicon, linux/amd64 for Intel).
+# This ensures images are built for the correct architecture without manual configuration.
+
+build:
+  artifacts:
+    - image: {{.ServiceName}}
+      context: ../../.. # Set context to the project root
+      docker:
+        dockerfile: backend/services/{{.ServiceName}}/Dockerfile
+  local:
+    push: false
+    useDockerCLI: true
+    useBuildkit: true
+    concurrency: 0
+
+deploy:
+  helm:
+    releases:
+      - name: {{.ServiceName}}
+        chartPath: ../../../infra/helm/service
+        valuesFiles:
+          - ./deploy/helm/values.yaml
+        namespace: {{.ProjectName}}
+        createNamespace: true
+        setValueTemplates:
+          image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+          image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
+
+profiles:
+  - name: local
+    build:
+      local:
+        push: false
+        useDockerCLI: true
+        useBuildkit: true
+    deploy:
+      helm:
+        releases:
+          - name: {{.ServiceName}}
+            chartPath: ../../../infra/helm/service
+            valuesFiles:
+              - ./deploy/helm/values.yaml
+              - ./deploy/helm/values-dev.yaml
+            namespace: {{.ProjectName}}
+            createNamespace: true
+            setValues:
+              image.pullPolicy: IfNotPresent
+            setValueTemplates:
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}`}}"
+
+  - name: dev
+    build:
+      local:
+        push: true
+        useDockerCLI: true
+        useBuildkit: true
+    deploy:
+      helm:
+        releases:
+          - name: {{.ServiceName}}-dev
+            chartPath: ../../../infra/helm/service
+            valuesFiles:
+              - ./deploy/helm/values.yaml
+              - ./deploy/helm/values-dev.yaml
+            namespace: dev
+            createNamespace: true
+            setValueTemplates:
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
+
+  - name: prod
+    build:
+      local:
+        push: true
+        useDockerCLI: true
+        useBuildkit: true
+    deploy:
+      helm:
+        releases:
+          - name: {{.ServiceName}}-prod
+            chartPath: ../../../infra/helm/service
+            valuesFiles:
+              - ./deploy/helm/values.yaml
+              - ./deploy/helm/values-prod.yaml
+            namespace: prod
+            createNamespace: true
+            setValueTemplates:
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"

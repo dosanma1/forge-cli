@@ -1,0 +1,56 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: api-gateway
+deploy:
+  helm:
+    releases:
+      - name: api-gateway
+        chartPath: ./
+        namespace: {{.WorkspaceName}}
+        createNamespace: true
+        wait: true
+        valuesFiles:
+          - values.yaml
+
+profiles:
+  - name: local
+    activation:
+      - kubeContext: kind-{{.WorkspaceName}}
+    deploy:
+      helm:
+        releases:
+          - name: api-gateway
+            chartPath: ./
+            namespace: {{.WorkspaceName}}
+            createNamespace: true
+            wait: true
+            valuesFiles:
+              - values.yaml
+              - envs/local.yaml
+
+  - name: dev
+    deploy:
+      helm:
+        releases:
+          - name: api-gateway
+            chartPath: ./
+            namespace: {{.WorkspaceName}}
+            createNamespace: true
+            wait: true
+            valuesFiles:
+              - values.yaml
+              - envs/dev.yaml
+
+  - name: prod
+    deploy:
+      helm:
+        releases:
+          - name: api-gateway
+            chartPath: ./
+            namespace: {{.WorkspaceName}}
+            createNamespace: true
+            wait: true
+            valuesFiles:
+              - values.yaml
+              - envs/prod.yaml
