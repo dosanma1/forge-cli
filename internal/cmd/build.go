@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/bazel"
@@ -336,20 +337,24 @@ func findWorkspaceRoot() (string, error) {
 		return "", err
 	}
 
+	// Traverse up the directory tree
 	for {
 		// Check for forge.json
-		if _, err := os.Stat(fmt.Sprintf("%s/forge.json", dir)); err == nil {
+		forgeJsonPath := filepath.Join(dir, "forge.json")
+		if _, err := os.Stat(forgeJsonPath); err == nil {
 			return dir, nil
 		}
 
 		// Check for MODULE.bazel (fallback)
-		if _, err := os.Stat(fmt.Sprintf("%s/MODULE.bazel", dir)); err == nil {
+		moduleBazelPath := filepath.Join(dir, "MODULE.bazel")
+		if _, err := os.Stat(moduleBazelPath); err == nil {
 			return dir, nil
 		}
 
 		// Move up one directory
-		parent := fmt.Sprintf("%s/..", dir)
+		parent := filepath.Dir(dir)
 		if parent == dir {
+			// Reached filesystem root
 			break
 		}
 		dir = parent
