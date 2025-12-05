@@ -95,7 +95,7 @@ func ValidateName(name string) error {
 // isValidProjectType checks if a project type is valid.
 func isValidProjectType(pt ProjectType) bool {
 	switch pt {
-	case ProjectTypeGoService, ProjectTypeAngularApp, ProjectTypeSharedLib, ProjectTypeTypescriptLib:
+	case ProjectTypeGoService, ProjectTypeNestJSService, ProjectTypeAngularApp, ProjectTypeReactApp, ProjectTypeVueApp, ProjectTypeSharedLib:
 		return true
 	default:
 		return false

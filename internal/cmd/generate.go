@@ -16,12 +16,14 @@ var generateCmd = &cobra.Command{
 
 Available types:
   service     Generate a new Go microservice
+  nestjs      Generate a new NestJS microservice
   handler     Generate a new HTTP handler
   middleware  Generate middleware
   frontend    Generate an Angular application
 
 Examples:
   forge generate service user-service
+  forge generate nestjs api-gateway
   forge g service payment-service
   forge generate frontend admin-app`,
 }
@@ -48,7 +50,51 @@ Examples:
 
 func init() {
 	generateCmd.AddCommand(generateServiceCmd)
+	generateCmd.AddCommand(generateNestJSCmd)
 	generateCmd.AddCommand(generateFrontendCmd)
+}
+
+var generateNestJSCmd = &cobra.Command{
+	Use:   "nestjs <name>",
+	Short: "Generate a new NestJS microservice",
+	Long: `Generate a new NestJS microservice with Forge patterns.
+
+This will create:
+- NestJS application structure
+- Health check endpoint
+- Dockerfile for containerization
+- Helm deployment values
+- Cloud Run configuration
+- TypeScript configuration
+- Package.json with dependencies
+
+Examples:
+  forge generate nestjs api-gateway
+  forge g nestjs payment-service`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGenerateNestJS,
+}
+
+func runGenerateNestJS(cmd *cobra.Command, args []string) error {
+	serviceName := args[0]
+
+	// Create generator
+	gen := generator.NewNestJSServiceGenerator()
+
+	// Prepare options
+	opts := generator.GeneratorOptions{
+		OutputDir: ".",
+		Name:      serviceName,
+		DryRun:    false,
+	}
+
+	// Generate service
+	ctx := context.Background()
+	if err := gen.Generate(ctx, opts); err != nil {
+		return fmt.Errorf("failed to generate NestJS service: %w", err)
+	}
+
+	return nil
 }
 
 var generateFrontendCmd = &cobra.Command{

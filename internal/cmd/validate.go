@@ -95,7 +95,8 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print validation errors
-	fmt.Println("\n❌ Validation failed with the following errors:\n")
+	fmt.Println("\n❌ Validation failed with the following errors:")
+	fmt.Println()
 
 	for i, desc := range result.Errors() {
 		fmt.Printf("%d. %s\n", i+1, desc.String())
@@ -132,52 +133,14 @@ func validateSemantics(config *workspace.Config) error {
 	}
 
 	// Check if registry is configured when using remote deployments
-	hasRemoteEnv := false
-	for _, env := range config.Environments {
-		if env.Target != "local" {
-			hasRemoteEnv = true
-			break
-		}
-	}
-
-	if hasRemoteEnv && config.Build.Registry == "" {
-		return fmt.Errorf("build.registry must be configured when using remote deployment targets")
-	}
+	// Registry validation removed - now handled per-project in project.build.registry
 
 	return nil
 }
 
 // fixSemanticIssues attempts to auto-fix common semantic issues
 func fixSemanticIssues(config *workspace.Config, workspaceDir string) error {
-	modified := false
-
-	// Fix missing registry for remote environments
-	hasRemoteEnv := false
-	for _, env := range config.Environments {
-		if env.Target != "local" {
-			hasRemoteEnv = true
-			break
-		}
-	}
-
-	if hasRemoteEnv && config.Build.Registry == "" {
-		// Try to infer from GKE/CloudRun config
-		if config.Infrastructure.GKE != nil && config.Infrastructure.GKE.ProjectID != "" {
-			region := config.Infrastructure.GKE.Region
-			if region == "" {
-				region = "us-central1"
-			}
-			config.Build.Registry = fmt.Sprintf("%s-docker.pkg.dev/%s/images", region, config.Infrastructure.GKE.ProjectID)
-			modified = true
-		}
-	}
-
-	if modified {
-		if err := config.SaveToDir(workspaceDir); err != nil {
-			return fmt.Errorf("failed to save fixed config: %w", err)
-		}
-	}
-
+	// Auto-fix logic removed - per-project config should be explicit
 	return nil
 }
 

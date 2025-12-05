@@ -57,8 +57,8 @@ func runTest(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not in a forge workspace: %w", err)
 	}
 
-	// Load workspace config
-	config, err := workspace.LoadConfig(workspaceRoot)
+	// Load workspace config (not used currently but may be needed for future test configuration)
+	_, err = workspace.LoadConfig(workspaceRoot)
 	if err != nil {
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
@@ -103,10 +103,7 @@ func runTest(cmd *cobra.Command, args []string) error {
 		testFlags = append(testFlags, "--instrumentation_filter=//...")
 	}
 
-	// Add remote cache if configured
-	if config.Build != nil && config.Build.Cache != nil && config.Build.Cache.RemoteURL != "" {
-		testFlags = append(testFlags, fmt.Sprintf("--remote_cache=%s", config.Build.Cache.RemoteURL))
-	}
+	// Remote cache removed - Bazel uses local cache by default
 
 	// Show user-friendly message
 	serviceNames := extractServiceNames(args)

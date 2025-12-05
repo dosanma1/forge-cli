@@ -87,9 +87,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	// Determine registry
 	registry := buildRegistry
-	if registry == "" && config.Build != nil && config.Build.Registry != "" {
-		registry = config.Build.Registry
-	} else if registry == "" && config.Workspace.Docker != nil && config.Workspace.Docker.Registry != "" {
+	if registry == "" && config.Workspace.Docker != nil && config.Workspace.Docker.Registry != "" {
 		registry = config.Workspace.Docker.Registry
 	}
 
@@ -137,33 +135,17 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		bazelFlags = append(bazelFlags, "--noshow_progress", "--color=no")
 	}
 
-	// Add remote cache if configured
-	cacheURL := ""
-	if config.Build != nil && config.Build.Cache != nil && config.Build.Cache.RemoteURL != "" {
-		cacheURL = config.Build.Cache.RemoteURL
-	}
-
+	// Add remote cache if configured (removed - now handled per-project)
 	// Auto-detect GitHub Actions cache
-	if os.Getenv("GITHUB_ACTIONS") == "true" && cacheURL == "" {
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		// GitHub Actions automatically mounts ~/.cache/bazel via actions/cache
 		// Bazel will use local cache automatically
 		if buildVerbose {
 			fmt.Println("  ℹ️  Detected GitHub Actions - using local cache from actions/cache")
 		}
-	} else if cacheURL != "" {
-		bazelFlags = append(bazelFlags, fmt.Sprintf("--remote_cache=%s", cacheURL))
-		if buildVerbose {
-			fmt.Printf("  ℹ️  Using remote cache: %s\n", cacheURL)
-		}
 	}
 
-	// Add parallel workers if configured
-	if config.Build != nil && config.Build.Parallel != nil && config.Build.Parallel.Workers > 0 {
-		bazelFlags = append(bazelFlags, fmt.Sprintf("--jobs=%d", config.Build.Parallel.Workers))
-		if buildVerbose {
-			fmt.Printf("  ℹ️  Using %d parallel workers\n", config.Build.Parallel.Workers)
-		}
-	}
+	// Parallel workers (removed - Bazel auto-detects optimal parallelism)
 
 	// Add platforms for multi-arch builds
 	if buildPush && buildPlatforms != "" {

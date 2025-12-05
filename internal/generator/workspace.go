@@ -64,6 +64,15 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 	// Create workspace configuration
 	config := workspace.NewConfig(workspaceName)
 
+	// Initialize workspace paths
+	config.Workspace.Paths = &workspace.WorkspacePaths{
+		Services:       "backend/services",
+		FrontendApps:   "frontend/projects",
+		Infrastructure: "infra",
+		Shared:         "shared",
+		Docs:           "docs",
+	}
+
 	// Extract optional metadata from Data
 	var dockerRegistry, gcpProjectID, k8sNamespace string
 	if opts.Data != nil {
@@ -98,19 +107,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		k8sNamespace = "default"
 	}
 
-	// Initialize build configuration
-	config.Build = &workspace.BuildConfig{
-		GoVersion:   "1.23",
-		NodeVersion: "20.18.1",
-		Registry:    dockerRegistry,
-		Cache: &workspace.CacheConfig{
-			RemoteURL: "", // User can configure this
-		},
-		Parallel: &workspace.ParallelConfig{
-			Workers: 0, // Auto-detect
-		},
-	}
-
 	// Initialize infrastructure configuration
 	config.Infrastructure = &workspace.InfrastructureConfig{
 		Kubernetes: &workspace.KubernetesInfra{
@@ -118,8 +114,11 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 			Namespace: k8sNamespace,
 		},
 		CloudRun: &workspace.CloudRunInfra{
-			Region:  "us-central1",
-			Project: gcpProjectID,
+			ProjectID: gcpProjectID,
+			Region:    "us-central1",
+		},
+		Kind: &workspace.KindInfra{
+			ConfigPath: "infra/kind-config.yaml",
 		},
 	}
 
@@ -163,7 +162,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 			Target:      "kubernetes",
 			Cluster:     fmt.Sprintf("kind-%s", workspaceName),
 			Namespace:   "default",
-			Profile:     "",
 		},
 		"dev": {
 			Name:        "dev",
@@ -171,7 +169,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 			Target:      defaultTarget,
 			Cluster:     "your-dev-cluster",
 			Namespace:   "dev",
-			Profile:     "dev",
 			Registry:    dockerRegistry,
 		},
 		"staging": {
@@ -180,7 +177,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 			Target:      defaultTarget,
 			Cluster:     "your-staging-cluster",
 			Namespace:   "staging",
-			Profile:     "staging",
 			Registry:    dockerRegistry,
 		},
 		"prod": {
@@ -189,7 +185,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 			Target:      defaultTarget,
 			Cluster:     "your-prod-cluster",
 			Namespace:   "production",
-			Profile:     "prod",
 			Registry:    dockerRegistry,
 			Region:      "us-central1",
 		},

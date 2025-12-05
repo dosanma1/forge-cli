@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dosanma1/forge-cli/internal/config"
 	"github.com/dosanma1/forge-cli/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -174,11 +175,8 @@ func deployToKubernetes(workspaceRoot string, config *workspace.Config, envConfi
 		skaffoldArgs = append(skaffoldArgs, "--skip-build")
 	}
 
-	// Add profile for environment (use custom profile if specified, otherwise use env name)
+	// Add profile for environment (use env name as profile)
 	profile := deployEnv
-	if envConfig.Profile != "" {
-		profile = envConfig.Profile
-	}
 	if profile != "" && profile != "local" {
 		skaffoldArgs = append(skaffoldArgs, fmt.Sprintf("--profile=%s", profile))
 	}
@@ -542,12 +540,7 @@ func deployServiceToCloudRun(workspaceRoot, serviceName, serviceRoot, gcpProject
 		"--min-instances", "0",
 	}
 
-	// Add environment variables if specified
-	if envConfig.Variables != nil && len(envConfig.Variables) > 0 {
-		for key, value := range envConfig.Variables {
-			deployArgs = append(deployArgs, "--set-env-vars", fmt.Sprintf("%s=%s", key, value))
-		}
-	}
+	// Environment variables (removed - use project.local or project.deploy config)
 
 	deployCmd := exec.Command("gcloud", deployArgs...)
 	deployCmd.Stdout = os.Stdout
@@ -676,13 +669,13 @@ func extractServiceNameFromTarget(target string) string {
 }
 
 // deployCloudRunLocally simulates Cloud Run deployment locally using Docker
-func deployCloudRunLocally(workspaceRoot string, config *workspace.Config, envConfig workspace.EnvironmentConfig) error {
+func deployCloudRunLocally(workspaceRoot string, cfg *workspace.Config, envConfig workspace.EnvironmentConfig) error {
 	fmt.Println("🏠 Deploying locally (Cloud Run simulation)...")
 	fmt.Println("   ℹ️  Running services in Docker with Cloud Run environment")
 
 	// Get list of services to deploy
 	services := []string{}
-	for name, project := range config.Projects {
+	for name, project := range cfg.Projects {
 		if project.Type == workspace.ProjectTypeGoService {
 			services = append(services, name)
 		}
@@ -694,14 +687,18 @@ func deployCloudRunLocally(workspaceRoot string, config *workspace.Config, envCo
 
 	fmt.Printf("\n📦 Building and running services: %s\n\n", strings.Join(services, ", "))
 
+	// Create resolver for configuration
+	resolver := config.NewResolver(cfg, "local")
+
 	// Auto-assign ports starting from 8080
 	nextPort := 8080
 	servicesPorts := make(map[string]int)
 
 	for _, serviceName := range services {
-		project := config.Projects[serviceName]
-		if project.Port > 0 {
-			servicesPorts[serviceName] = project.Port
+		// Use resolver to get port (checks project.local.cloudrun.port first)
+		port := resolver.ResolvePort(serviceName, "cloudrun")
+		if port > 0 {
+			servicesPorts[serviceName] = port
 		} else {
 			servicesPorts[serviceName] = nextPort
 			nextPort++
@@ -711,7 +708,7 @@ func deployCloudRunLocally(workspaceRoot string, config *workspace.Config, envCo
 	// Deploy each service with its assigned port
 	for _, serviceName := range services {
 		port := servicesPorts[serviceName]
-		if err := runServiceLocallyAsCloudRun(workspaceRoot, serviceName, port, config); err != nil {
+		if err := runServiceLocallyAsCloudRun(workspaceRoot, serviceName, port, cfg); err != nil {
 			return fmt.Errorf("failed to run service %s: %w", serviceName, err)
 		}
 	}

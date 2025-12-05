@@ -56,7 +56,13 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		return fmt.Errorf("project %q already exists", serviceName)
 	}
 
-	serviceDir := filepath.Join(opts.OutputDir, "backend/services", serviceName)
+	// Determine service path using workspace.paths or default
+	servicesPath := "backend/services"
+	if config.Workspace.Paths != nil && config.Workspace.Paths.Services != "" {
+		servicesPath = config.Workspace.Paths.Services
+	}
+
+	serviceDir := filepath.Join(opts.OutputDir, servicesPath, serviceName)
 
 	if opts.DryRun {
 		fmt.Printf("Would create service: %s\n", serviceDir)
@@ -233,8 +239,45 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 	project := &workspace.Project{
 		Name: serviceName,
 		Type: workspace.ProjectTypeGoService,
-		Root: fmt.Sprintf("backend/services/%s", serviceName),
+		Root: filepath.Join(servicesPath, serviceName),
 		Tags: []string{"backend", "service"},
+		Build: &workspace.ProjectBuildConfig{
+			GoVersion:  "1.23",
+			Registry:   dockerRegistry,
+			Dockerfile: "Dockerfile",
+		},
+		Deploy: &workspace.ProjectDeployConfig{
+			Targets:    []string{"helm", "cloudrun"},
+			ConfigPath: "deploy",
+			Helm: &workspace.ProjectDeployHelm{
+				Port:       8080,
+				HealthPath: "/healthz",
+			},
+			CloudRun: &workspace.ProjectDeployCloudRun{
+				Port:         8080,
+				CPU:          "1",
+				Memory:       "512Mi",
+				Concurrency:  80,
+				MinInstances: 0,
+				MaxInstances: 10,
+				Timeout:      "300s",
+				HealthPath:   "/healthz",
+			},
+		},
+		Local: &workspace.ProjectLocalConfig{
+			CloudRun: &workspace.ProjectLocalCloudRun{
+				Port: 8080,
+				Env: map[string]string{
+					"LOG_LEVEL": "debug",
+				},
+			},
+			GKE: &workspace.ProjectLocalGKE{
+				Port: 8080,
+				Env: map[string]string{
+					"LOG_LEVEL": "debug",
+				},
+			},
+		},
 	}
 
 	if err := config.AddProject(project); err != nil {
