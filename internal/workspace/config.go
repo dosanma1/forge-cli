@@ -25,21 +25,35 @@ type BuildConfig struct {
 	GoVersion   string          `json:"goVersion,omitempty"`
 	NodeVersion string          `json:"nodeVersion,omitempty"`
 	Registry    string          `json:"registry,omitempty"`
+	Platforms   []string        `json:"platforms,omitempty"` // Target platforms for multi-arch builds
+	TagPolicy   string          `json:"tagPolicy,omitempty"` // "gitCommit" | "sha256" | "datetime" | "envTemplate"
 	Cache       *CacheConfig    `json:"cache,omitempty"`
 	Parallel    *ParallelConfig `json:"parallel,omitempty"`
 }
 
 // InfrastructureConfig contains infrastructure configuration.
 type InfrastructureConfig struct {
+	GKE              *GKEInfra        `json:"gke,omitempty"`
 	Kubernetes       *KubernetesInfra `json:"kubernetes,omitempty"`
 	CloudRun         *CloudRunInfra   `json:"cloudrun,omitempty"`
-	DeploymentTarget string           `json:"deploymentTarget,omitempty"` // "kubernetes" | "cloudrun" | "both"
+	DeploymentTarget string           `json:"deploymentTarget,omitempty"` // "gke" | "kubernetes" | "cloudrun" | "both"
 }
 
-// KubernetesInfra contains Kubernetes infrastructure config.
+// GKEInfra contains Google Kubernetes Engine (GKE) infrastructure config.
+type GKEInfra struct {
+	ProjectID                string `json:"projectId,omitempty"`
+	ClusterName              string `json:"clusterName,omitempty"`
+	Region                   string `json:"region,omitempty"` // Use region for regional clusters
+	Namespace                string `json:"namespace,omitempty"`
+	WorkloadIdentityProvider string `json:"workloadIdentityProvider,omitempty"` // For CI/CD authentication
+	ServiceAccount           string `json:"serviceAccount,omitempty"`           // Service account email for Workload Identity
+}
+
+// KubernetesInfra contains generic Kubernetes infrastructure config (non-cloud provider).
 type KubernetesInfra struct {
 	Cluster   string `json:"cluster,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
+	Context   string `json:"context,omitempty"` // Kubeconfig context
 }
 
 // CloudRunInfra contains Cloud Run infrastructure config.
@@ -51,6 +65,7 @@ type CloudRunInfra struct {
 // EnvironmentConfig contains environment-specific deployment configuration.
 type EnvironmentConfig struct {
 	Name        string            `json:"name"`
+	Target      string            `json:"target,omitempty"` // "gke" | "kubernetes" | "cloudrun" (defaults to kubernetes)
 	Profile     string            `json:"profile,omitempty"`
 	Cluster     string            `json:"cluster,omitempty"`
 	Namespace   string            `json:"namespace,omitempty"`
@@ -58,6 +73,36 @@ type EnvironmentConfig struct {
 	Region      string            `json:"region,omitempty"`
 	Description string            `json:"description,omitempty"`
 	Variables   map[string]string `json:"variables,omitempty"`
+	Deploy      *DeployConfig     `json:"deploy,omitempty"` // Deployment configuration per environment
+}
+
+// DeployConfig contains deployment-specific configuration.
+type DeployConfig struct {
+	Type     string                `json:"type"`               // "helm" | "cloudrun"
+	Helm     *HelmConfig           `json:"helm,omitempty"`     // Helm-specific deployment config
+	CloudRun *CloudRunDeployConfig `json:"cloudrun,omitempty"` // Cloud Run-specific deployment config
+}
+
+// HelmConfig contains Helm deployer configuration.
+type HelmConfig struct {
+	ReleasePrefix   string `json:"releasePrefix,omitempty"`
+	CreateNamespace bool   `json:"createNamespace,omitempty"`
+	Timeout         string `json:"timeout,omitempty"` // e.g., "5m"
+	Wait            bool   `json:"wait,omitempty"`
+	Atomic          bool   `json:"atomic,omitempty"`
+}
+
+// CloudRunDeployConfig contains Cloud Run deployer configuration.
+type CloudRunDeployConfig struct {
+	ProjectID            string `json:"projectId,omitempty"`
+	Region               string `json:"region,omitempty"`
+	CPU                  string `json:"cpu,omitempty"`    // e.g., "1", "2"
+	Memory               string `json:"memory,omitempty"` // e.g., "512Mi", "1Gi"
+	Concurrency          int    `json:"concurrency,omitempty"`
+	MinInstances         int    `json:"minInstances,omitempty"`
+	MaxInstances         int    `json:"maxInstances,omitempty"`
+	Timeout              string `json:"timeout,omitempty"` // e.g., "300s"
+	AllowUnauthenticated bool   `json:"allowUnauthenticated,omitempty"`
 }
 
 // CacheConfig contains build cache configuration.

@@ -1,0 +1,23 @@
+# Bazel + pnpm compatibility settings for Angular workspace
+# These settings ensure proper symlink handling and dependency resolution
+# when using Bazel's rules_js with pnpm package manager.
+
+# Hoist all dependencies to the root node_modules
+# Required for Bazel to properly resolve dependencies
+shamefully-hoist=true
+
+# Preserve symlinks during module resolution
+# Essential for Bazel's hermetic builds and symlink-based workspace structure
+node-linker=hoisted
+
+# Don't fail on peer dependency version mismatches
+# Provides flexibility in monorepo dependency management
+strict-peer-dependencies=false
+
+# Enable legacy peer dependency resolution
+# Helps with compatibility across different Angular versions
+legacy-peer-deps=true
+
+# Auto-install peer dependencies
+# Reduces manual dependency management overhead
+auto-install-peers=true

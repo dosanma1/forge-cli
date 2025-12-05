@@ -42,11 +42,10 @@ use_repo(oci, "distroless_base")
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.23.4")
 
-# Go dependencies from go.mod files
+# Go dependencies from workspace-level go.mod
+# Use go.work to manage multiple modules, but Bazel only needs the root go.mod
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-{{range .Services}}
-go_deps.from_file(go_mod = "//backend/services/{{.Name}}:go.mod")
-{{end}}
+go_deps.from_file(go_mod = "//:go.mod")
 use_repo(go_deps)
 
 {{if .HasFrontend}}

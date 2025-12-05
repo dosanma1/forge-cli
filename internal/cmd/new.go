@@ -16,6 +16,8 @@ var (
 	newDockerRegistry string
 	newGCPProjectID   string
 	newK8sNamespace   string
+	newGKERegion      string
+	newGKECluster     string
 )
 
 var newCmd = &cobra.Command{
@@ -39,6 +41,8 @@ func init() {
 	newCmd.Flags().StringVar(&newDockerRegistry, "docker-registry", "", "Docker registry (e.g., gcr.io/mycompany)")
 	newCmd.Flags().StringVar(&newGCPProjectID, "gcp-project", "", "GCP project ID")
 	newCmd.Flags().StringVar(&newK8sNamespace, "k8s-namespace", "", "Kubernetes namespace")
+	newCmd.Flags().StringVar(&newGKERegion, "gke-region", "us-central1", "GKE cluster region")
+	newCmd.Flags().StringVar(&newGKECluster, "gke-cluster", "", "GKE cluster name (defaults to <workspace>-cluster)")
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
@@ -100,6 +104,8 @@ func runNew(cmd *cobra.Command, args []string) error {
 			"docker_registry":      newDockerRegistry,
 			"gcp_project_id":       newGCPProjectID,
 			"k8s_namespace":        newK8sNamespace,
+			"gke_region":           newGKERegion,
+			"gke_cluster":          newGKECluster,
 			"create_backend":       createBackend,
 			"backend_service_name": backendServiceName,
 			"create_frontend":      createFrontend,

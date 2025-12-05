@@ -44,20 +44,19 @@ jobs:
           curl -sSL https://raw.githubusercontent.com/{{.GitHubOrg}}/forge-cli/main/install.sh | bash
           echo "$HOME/.forge/bin" >> $GITHUB_PATH
 
+      - name: Validate configuration
+        run: forge validate
+
       - name: Setup development environment
         run: forge setup
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{"{{"}} vars.REGISTRY }}
-
       - name: Build and push images
-        run: forge build --push
+        run: forge build --push --ci
         env:
-          REGISTRY: ${{"{{"}} vars.REGISTRY }}
-          GCP_PROJECT_ID: ${{"{{"}} vars.GCP_PROJECT_ID }}
+          ENV: ${{"{{"}} vars.ENV }}
 
       - name: Deploy to Cloud Run
-        run: forge deploy --target=cloudrun --env=${{"{{"}} vars.ENV }}
+        run: forge deploy --env=${{"{{"}} vars.ENV }} --skip-build
         env:
-          CLOUDRUN_REGION: ${{"{{"}} vars.CLOUDRUN_REGION }}
-          GCP_PROJECT_ID: ${{"{{"}} vars.GCP_PROJECT_ID }}
+          ENV: ${{"{{"}} vars.ENV }}
+

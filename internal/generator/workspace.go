@@ -123,11 +123,44 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		},
 	}
 
+	// Add GKE infrastructure if GCP project is provided
+	if gcpProjectID != "" {
+		region := "us-central1" // default region
+		if opts.Data != nil {
+			if r, ok := opts.Data["gke_region"].(string); ok && r != "" {
+				region = r
+			}
+		}
+
+		clusterName := fmt.Sprintf("%s-cluster", workspaceName)
+		if opts.Data != nil {
+			if c, ok := opts.Data["gke_cluster"].(string); ok && c != "" {
+				clusterName = c
+			}
+		}
+
+		config.Infrastructure.GKE = &workspace.GKEInfra{
+			ProjectID:   gcpProjectID,
+			ClusterName: clusterName,
+			Region:      region,
+			Namespace:   k8sNamespace,
+			WorkloadIdentityProvider: fmt.Sprintf("projects/%s/locations/global/workloadIdentityPools/%s-pool/providers/%s-provider",
+				gcpProjectID, workspaceName, workspaceName),
+			ServiceAccount: fmt.Sprintf("%s-sa@%s.iam.gserviceaccount.com", workspaceName, gcpProjectID),
+		}
+	}
+
 	// Initialize default environments
+	defaultTarget := "kubernetes"
+	if gcpProjectID != "" {
+		defaultTarget = "gke" // Use GKE if GCP project is configured
+	}
+
 	config.Environments = map[string]workspace.EnvironmentConfig{
 		"local": {
 			Name:        "local",
 			Description: "Local development (kind/minikube)",
+			Target:      "kubernetes",
 			Cluster:     fmt.Sprintf("kind-%s", workspaceName),
 			Namespace:   "default",
 			Profile:     "",
@@ -135,6 +168,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		"dev": {
 			Name:        "dev",
 			Description: "Development environment",
+			Target:      defaultTarget,
 			Cluster:     "your-dev-cluster",
 			Namespace:   "dev",
 			Profile:     "dev",
@@ -143,6 +177,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		"staging": {
 			Name:        "staging",
 			Description: "Staging environment",
+			Target:      defaultTarget,
 			Cluster:     "your-staging-cluster",
 			Namespace:   "staging",
 			Profile:     "staging",
@@ -151,6 +186,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		"prod": {
 			Name:        "prod",
 			Description: "Production environment",
+			Target:      defaultTarget,
 			Cluster:     "your-prod-cluster",
 			Namespace:   "production",
 			Profile:     "prod",
@@ -402,6 +438,8 @@ func (g *WorkspaceGenerator) generateBazelFilesWithOrg(workspaceDir, workspaceNa
 		".bazelrc":      "bazel/.bazelrc.tmpl",
 		".bazelignore":  "bazel/.bazelignore.tmpl",
 		".bazelversion": "bazel/.bazelversion.tmpl",
+		"go.mod":        "bazel/go.mod.tmpl",
+		"go.work":       "bazel/go.work.tmpl",
 	}
 
 	// Convert services to map format for template
@@ -437,30 +475,6 @@ func (g *WorkspaceGenerator) generateBazelFilesWithOrg(workspaceDir, workspaceNa
 	return nil
 }
 
-// generateForgeConfig creates .forge.yaml
-func (g *WorkspaceGenerator) generateForgeConfig(workspaceDir, workspaceName string) error {
-	data := map[string]interface{}{
-		"ProjectName":    workspaceName,
-		"GoVersion":      "1.23",
-		"NodeVersion":    "20.18.1",
-		"DockerRegistry": fmt.Sprintf("gcr.io/%s", workspaceName),
-		"GCPProjectID":   workspaceName,
-		"K8sNamespace":   "default",
-	}
-
-	content, err := g.engine.RenderTemplate(".forge.yaml.tmpl", data)
-	if err != nil {
-		return fmt.Errorf("failed to render .forge.yaml: %w", err)
-	}
-
-	filePath := filepath.Join(workspaceDir, ".forge.yaml")
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write .forge.yaml: %w", err)
-	}
-
-	return nil
-}
-
 // generateGitHubWorkflows creates GitHub Actions workflow files
 func (g *WorkspaceGenerator) generateGitHubWorkflows(workspaceDir string) error {
 	workflowsDir := filepath.Join(workspaceDir, ".github", "workflows")
@@ -470,7 +484,7 @@ func (g *WorkspaceGenerator) generateGitHubWorkflows(workspaceDir string) error 
 
 	workflows := map[string]string{
 		"ci.yml":              "github/workflows/ci.yml.tmpl",
-		"deploy-k8s.yml":      "github/workflows/deploy-k8s.yml.tmpl",
+		"deploy-gke.yml":      "github/workflows/deploy-gke.yml.tmpl",
 		"deploy-cloudrun.yml": "github/workflows/deploy-cloudrun.yml.tmpl",
 	}
 

@@ -21,4 +21,5 @@ func Execute() error {
 func init() {
 	rootCmd.AddCommand(newCmd)
 	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(validateCmd)
 }

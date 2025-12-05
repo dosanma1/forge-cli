@@ -104,6 +104,16 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		if err := os.WriteFile(postcssPath, []byte(postcssContent), 0644); err != nil {
 			return fmt.Errorf("failed to create .postcssrc.json: %w", err)
 		}
+
+		// Create .npmrc from template for Bazel + pnpm compatibility
+		npmrcContent, err := g.engine.RenderTemplate("frontend/.npmrc.tmpl", map[string]interface{}{})
+		if err != nil {
+			return fmt.Errorf("failed to render .npmrc: %w", err)
+		}
+		npmrcPath := filepath.Join(frontendDir, ".npmrc")
+		if err := os.WriteFile(npmrcPath, []byte(npmrcContent), 0644); err != nil {
+			return fmt.Errorf("failed to create .npmrc: %w", err)
+		}
 	}
 
 	// Generate application using ng generate application

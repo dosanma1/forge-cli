@@ -3,22 +3,22 @@ kind: Config
 metadata:
   name: {{.ServiceName}}
 
-# Platform auto-detection: Skaffold automatically detects the target platform based on
-# the Kubernetes cluster's node architecture (linux/arm64 for Apple Silicon, linux/amd64 for Intel).
-# This ensures images are built for the correct architecture without manual configuration.
+# Bazel Integration: Skaffold uses Bazel to build images with Docker-format tarballs
+# for compatibility. Bazel automatically detects changes and only rebuilds affected
+# services (incremental builds). Multi-platform builds and caching for faster CI/CD.
 
 build:
   artifacts:
     - image: {{.ServiceName}}
-      context: ../../.. # Set context to the project root
-      docker:
-        dockerfile: backend/services/{{.ServiceName}}/Dockerfile
-  local:
-    push: false
-    useDockerCLI: true
-    useBuildkit: true
-    concurrency: 0
+      bazel:
+        target: //backend/services/{{.ServiceName}}/cmd/server:image_tarball.tar
+        args:
+          - --platforms=@rules_go//go/toolchain:linux_amd64
+  tagPolicy:
+    gitCommit:
+      variant: AbbrevCommitSha
 
+# Default deployment using Helm
 deploy:
   helm:
     releases:
@@ -33,12 +33,15 @@ deploy:
           image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
 
 profiles:
+  # Local development profile for Kind cluster
   - name: local
     build:
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //backend/services/{{.ServiceName}}/cmd/server:image_tarball.tar
       local:
         push: false
-        useDockerCLI: true
-        useBuildkit: true
     deploy:
       helm:
         releases:
@@ -55,12 +58,17 @@ profiles:
               image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
               image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}`}}"
 
+  # Dev environment with Google Cloud Build
   - name: dev
     build:
-      local:
-        push: true
-        useDockerCLI: true
-        useBuildkit: true
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //backend/services/{{.ServiceName}}/cmd/server:image_tarball.tar
+            args:
+              - --platforms=@rules_go//go/toolchain:linux_amd64
+      googleCloudBuild:
+        projectId: {{.GCPProjectID}}
     deploy:
       helm:
         releases:
@@ -75,12 +83,18 @@ profiles:
               image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
               image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
 
+  # Production environment with strict builds
   - name: prod
     build:
-      local:
-        push: true
-        useDockerCLI: true
-        useBuildkit: true
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //backend/services/{{.ServiceName}}/cmd/server:image_tarball.tar
+            args:
+              - --platforms=@rules_go//go/toolchain:linux_amd64
+              - --config=prod
+      googleCloudBuild:
+        projectId: {{.GCPProjectID}}
     deploy:
       helm:
         releases:
@@ -94,3 +108,19 @@ profiles:
             setValueTemplates:
               image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
               image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
+
+  # Cloud Run deployment profile
+  - name: cloudrun
+    build:
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //backend/services/{{.ServiceName}}/cmd/server:image_tarball.tar
+            args:
+              - --platforms=@rules_go//go/toolchain:linux_amd64
+      googleCloudBuild:
+        projectId: {{.GCPProjectID}}
+    deploy:
+      cloudrun:
+        projectid: {{.GCPProjectID}}
+        region: us-central1

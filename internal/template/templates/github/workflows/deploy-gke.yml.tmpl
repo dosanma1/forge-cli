@@ -1,0 +1,62 @@
+name: Deploy to GKE
+
+on:
+  push:
+    branches: [develop]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: "dev"
+
+jobs:
+  deploy:
+    name: Build and Deploy to GKE
+    runs-on: ubuntu-latest
+    environment: ${{"{{"}} (github.event_name == 'release' && github.event.action == 'published') && 'prod' || (github.event_name == 'workflow_dispatch' && inputs.environment) || 'dev' }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{"{{"}} secrets.WIF_PROVIDER }}
+          service_account: ${{"{{"}} secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Forge
+        run: |
+          curl -sSL https://raw.githubusercontent.com/{{.GitHubOrg}}/forge-cli/main/install.sh | bash
+          echo "$HOME/.forge/bin" >> $GITHUB_PATH
+
+      - name: Validate configuration
+        run: forge validate
+
+      - name: Setup development environment
+        run: forge setup
+
+      - name: Build and push images
+        run: forge build --push --ci
+        env:
+          ENV: ${{"{{"}} vars.ENV }}
+
+      - name: Deploy to GKE
+        run: forge deploy --env=${{"{{"}} vars.ENV }} --skip-build
+        env:
+          ENV: ${{"{{"}} vars.ENV }}
+
