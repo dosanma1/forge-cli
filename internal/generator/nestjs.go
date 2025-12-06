@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -12,8 +13,12 @@ import (
 	"github.com/dosanma1/forge-cli/internal/workspace"
 )
 
-//go:embed templates/nestjs/*
-//go:embed templates/nestjs/**/*
+//go:embed templates/nestjs/BUILD.bazel.tmpl
+//go:embed templates/nestjs/skaffold.yaml.tmpl
+//go:embed templates/nestjs/Dockerfile.tmpl
+//go:embed templates/nestjs/src/health/health.controller.ts.tmpl
+//go:embed templates/nestjs/deploy/helm/values.yaml.tmpl
+//go:embed templates/nestjs/deploy/cloudrun/service.yaml.tmpl
 var nestjsTemplates embed.FS
 
 // NestJSServiceGenerator generates a new NestJS microservice.
@@ -45,6 +50,15 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		return fmt.Errorf("service name is required")
 	}
 
+	// Check prerequisites
+	if err := CheckNodeJS(); err != nil {
+		return err
+	}
+	
+	if err := CheckNPM(); err != nil {
+		return err
+	}
+
 	// Validate name
 	if err := workspace.ValidateName(serviceName); err != nil {
 		return fmt.Errorf("invalid service name: %w", err)
@@ -72,7 +86,8 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		servicesPath = config.Workspace.Paths.Services
 	}
 
-	serviceDir := filepath.Join(workspaceRoot, servicesPath, serviceName)
+	servicesDir := filepath.Join(workspaceRoot, servicesPath)
+	serviceDir := filepath.Join(servicesDir, serviceName)
 
 	// Check if service already exists
 	if _, err := os.Stat(serviceDir); err == nil {
@@ -84,20 +99,21 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		return nil
 	}
 
-	// Create service directory structure
-	dirs := []string{
-		serviceDir,
-		filepath.Join(serviceDir, "src"),
-		filepath.Join(serviceDir, "src", "health"),
-		filepath.Join(serviceDir, "test"),
-		filepath.Join(serviceDir, "deploy", "helm"),
-		filepath.Join(serviceDir, "deploy", "cloudrun"),
+	// Ensure services directory exists
+	if err := os.MkdirAll(servicesDir, 0755); err != nil {
+		return fmt.Errorf("failed to create services directory: %w", err)
 	}
 
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
+	// Generate NestJS project using Nest CLI
+	fmt.Printf("🚀 Generating NestJS project: %s\n", serviceName)
+
+	if err := g.runNestCLI(servicesDir, []string{
+		"new", serviceName,
+		"--package-manager", "npm",
+		"--skip-git",
+		"--strict",
+	}); err != nil {
+		return fmt.Errorf("failed to generate NestJS project: %w", err)
 	}
 
 	// Determine registry
@@ -117,7 +133,30 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		workspaceName = "workspace"
 	}
 
-	// Generate files
+	// Install additional dependencies
+	fmt.Println("📦 Installing additional dependencies...")
+	if err := g.runNpmCommand(serviceDir, []string{"install", "@nestjs/terminus", "--save"}); err != nil {
+		return fmt.Errorf("failed to install @nestjs/terminus: %w", err)
+	}
+
+	// Generate health controller using Nest CLI
+	fmt.Println("🏥 Generating health check controller...")
+	if err := g.runNestCLI(serviceDir, []string{"generate", "controller", "health", "--no-spec", "--flat"}); err != nil {
+		return fmt.Errorf("failed to generate health controller: %w", err)
+	}
+
+	// Create deploy directories
+	deployDirs := []string{
+		filepath.Join(serviceDir, "deploy", "helm"),
+		filepath.Join(serviceDir, "deploy", "cloudrun"),
+	}
+	for _, dir := range deployDirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+	}
+
+	// Generate Forge-specific files from templates
 	data := map[string]interface{}{
 		"ServiceName":   serviceName,
 		"Registry":      registry,
@@ -125,36 +164,29 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		"ServicesPath":  servicesPath,
 	}
 
-	files := map[string]string{
+	forgeFiles := map[string]string{
 		"BUILD.bazel":                     "templates/nestjs/BUILD.bazel.tmpl",
 		"skaffold.yaml":                   "templates/nestjs/skaffold.yaml.tmpl",
-		"package.json":                    "templates/nestjs/package.json.tmpl",
-		"tsconfig.json":                   "templates/nestjs/tsconfig.json.tmpl",
-		"nest-cli.json":                   "templates/nestjs/nest-cli.json.tmpl",
-		".eslintrc.js":                    "templates/nestjs/.eslintrc.js.tmpl",
-		".prettierrc":                     "templates/nestjs/.prettierrc.tmpl",
 		"Dockerfile":                      "templates/nestjs/Dockerfile.tmpl",
-		"README.md":                       "templates/nestjs/README.md.tmpl",
-		"src/main.ts":                     "templates/nestjs/src/main.ts.tmpl",
-		"src/app.module.ts":               "templates/nestjs/src/app.module.ts.tmpl",
-		"src/app.controller.ts":           "templates/nestjs/src/app.controller.ts.tmpl",
-		"src/app.service.ts":              "templates/nestjs/src/app.service.ts.tmpl",
 		"src/health/health.controller.ts": "templates/nestjs/src/health/health.controller.ts.tmpl",
-		"test/app.e2e-spec.ts":            "templates/nestjs/test/app.e2e-spec.ts.tmpl",
-		"test/jest-e2e.json":              "templates/nestjs/test/jest-e2e.json.tmpl",
 		"deploy/helm/values.yaml":         "templates/nestjs/deploy/helm/values.yaml.tmpl",
 		"deploy/cloudrun/service.yaml":    "templates/nestjs/deploy/cloudrun/service.yaml.tmpl",
 	}
 
-	for outputPath, templatePath := range files {
+	for outputPath, templatePath := range forgeFiles {
 		fullPath := filepath.Join(serviceDir, outputPath)
-		
+
+		// Ensure parent directory exists
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", outputPath, err)
+		}
+
 		// Read template from embedded filesystem
 		templateContent, err := nestjsTemplates.ReadFile(templatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
-		
+
 		rendered, err := g.engine.Render(string(templateContent), data)
 		if err != nil {
 			return fmt.Errorf("failed to render template for %s: %w", outputPath, err)
@@ -163,6 +195,12 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		if err := os.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", outputPath, err)
 		}
+	}
+
+	// Update app.module.ts to import TerminusModule and HealthController
+	fmt.Println("🔧 Configuring health check module...")
+	if err := g.updateAppModule(serviceDir); err != nil {
+		return fmt.Errorf("failed to update app.module.ts: %w", err)
 	}
 
 	// Register service in forge.json
@@ -221,7 +259,7 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		return fmt.Errorf("failed to update root skaffold.yaml: %w", err)
 	}
 
-	fmt.Printf("✓ Created NestJS service: %s\n", serviceName)
+	fmt.Printf("\n✓ Created NestJS service: %s\n", serviceName)
 	fmt.Printf("  Location: %s\n", serviceDir)
 	fmt.Printf("  Registry: %s\n", registry)
 	fmt.Printf("\nNext steps:\n")
@@ -233,78 +271,102 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 	return nil
 }
 
+// runNestCLI executes Nest CLI commands
+func (g *NestJSServiceGenerator) runNestCLI(workDir string, args []string) error {
+	return g.runCommand(workDir, "npx", append([]string{"@nestjs/cli@latest"}, args...)...)
+}
 
-// updateRootSkaffold adds the service to the root skaffold.yaml requires section
-func updateRootSkaffold(workspaceRoot, servicesPath, serviceName string) error {
-	skaffoldPath := filepath.Join(workspaceRoot, "skaffold.yaml")
-	
-	// Check if root skaffold.yaml exists
-	if _, err := os.Stat(skaffoldPath); os.IsNotExist(err) {
-		// No root skaffold.yaml, skip update
-		return nil
+// runNpmCommand executes npm commands
+func (g *NestJSServiceGenerator) runNpmCommand(workDir string, args []string) error {
+	return g.runCommand(workDir, "npm", args...)
+}
+
+// runCommand executes a shell command
+func (g *NestJSServiceGenerator) runCommand(workDir, command string, args ...string) error {
+	cmd := exec.Command(command, args...)
+	cmd.Dir = workDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	// Set environment variables to make CLI non-interactive
+	cmd.Env = append(os.Environ(),
+		"CI=true", // Treat as CI environment (non-interactive)
+	)
+
+	fmt.Printf("  Running: %s %s\n", command, strings.Join(args, " "))
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("command failed: %w", err)
 	}
-	
-	// Read the file
-	content, err := os.ReadFile(skaffoldPath)
+
+	return nil
+}
+
+// updateAppModule updates app.module.ts to import TerminusModule and HealthController
+func (g *NestJSServiceGenerator) updateAppModule(serviceDir string) error {
+	appModulePath := filepath.Join(serviceDir, "src", "app.module.ts")
+
+	// Read app.module.ts
+	data, err := os.ReadFile(appModulePath)
 	if err != nil {
-		return fmt.Errorf("failed to read skaffold.yaml: %w", err)
+		return fmt.Errorf("failed to read app.module.ts: %w", err)
 	}
-	
-	// Check if service is already in requires
-	servicePath := filepath.Join(servicesPath, serviceName)
-	if strings.Contains(string(content), "path: "+servicePath) {
-		// Already exists, skip
-		return nil
-	}
-	
-	// Find the requires section and add the service
-	lines := strings.Split(string(content), "\n")
-	var newLines []string
-	inRequires := false
-	requiresIndent := ""
-	inserted := false
-	
-	for i, line := range lines {
-		newLines = append(newLines, line)
-		
-		if strings.Contains(line, "requires:") {
-			inRequires = true
-			// Get the indent of the next line
-			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "- path:") {
-				requiresIndent = strings.Split(lines[i+1], "- path:")[0]
-			} else {
-				requiresIndent = "  " // default indent
-			}
-			continue
-		}
-		
-		if inRequires && !inserted {
-			// Check if we're still in requires section
-			if strings.TrimSpace(line) == "" || (!strings.HasPrefix(strings.TrimLeft(line, " "), "-") && strings.TrimSpace(line) != "") {
-				// End of requires section, insert before this line
-				newLines = newLines[:len(newLines)-1] // remove last line
-				newLines = append(newLines, requiresIndent+"- path: "+servicePath)
-				newLines = append(newLines, line) // add back the line
-				inserted = true
-				inRequires = false
-			} else if i == len(lines)-1 {
-				// Last line and still in requires
-				newLines = append(newLines, requiresIndent+"- path: "+servicePath)
-				inserted = true
+
+	content := string(data)
+
+	// Add TerminusModule import
+	if !strings.Contains(content, "@nestjs/terminus") {
+		// Find the last import statement
+		importLines := strings.Split(content, "\n")
+		lastImportIdx := -1
+		for i, line := range importLines {
+			if strings.HasPrefix(strings.TrimSpace(line), "import ") {
+				lastImportIdx = i
 			}
 		}
+
+		if lastImportIdx != -1 {
+			// Insert TerminusModule import after last import
+			terminusImport := "import { TerminusModule } from '@nestjs/terminus';"
+			importLines = append(importLines[:lastImportIdx+1], append([]string{terminusImport}, importLines[lastImportIdx+1:]...)...)
+			content = strings.Join(importLines, "\n")
+		}
 	}
-	
-	// If we reached end without inserting and requires was found
-	if inRequires && !inserted {
-		newLines = append(newLines, requiresIndent+"- path: "+servicePath)
+
+	// Add HealthController import
+	if !strings.Contains(content, "./health/health.controller") {
+		// Find the last import statement again
+		importLines := strings.Split(content, "\n")
+		lastImportIdx := -1
+		for i, line := range importLines {
+			if strings.HasPrefix(strings.TrimSpace(line), "import ") {
+				lastImportIdx = i
+			}
+		}
+
+		if lastImportIdx != -1 {
+			// Insert HealthController import after last import
+			healthImport := "import { HealthController } from './health/health.controller';"
+			importLines = append(importLines[:lastImportIdx+1], append([]string{healthImport}, importLines[lastImportIdx+1:]...)...)
+			content = strings.Join(importLines, "\n")
+		}
 	}
-	
-	// Write back
-	newContent := strings.Join(newLines, "\n")
-	if err := os.WriteFile(skaffoldPath, []byte(newContent), 0644); err != nil {
-		return fmt.Errorf("failed to write skaffold.yaml: %w", err)
+
+	// Add TerminusModule to imports array
+	if !strings.Contains(content, "TerminusModule") {
+		content = strings.Replace(content, "imports: [", "imports: [TerminusModule, ", 1)
 	}
-	
+
+	// Add HealthController to controllers array
+	if !strings.Contains(content, "HealthController") {
+		content = strings.Replace(content, "controllers: [", "controllers: [HealthController, ", 1)
+	}
+
+	// Write updated app.module.ts
+	if err := os.WriteFile(appModulePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write app.module.ts: %w", err)
+	}
+
 	return nil
 }

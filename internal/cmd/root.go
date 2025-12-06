@@ -19,7 +19,8 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.AddCommand(newCmd)
+	// Commands are registered in their respective files via init()
+	// This avoids duplicate command registration
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(validateCmd)
 }

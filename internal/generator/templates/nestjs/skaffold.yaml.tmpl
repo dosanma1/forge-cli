@@ -3,13 +3,12 @@ kind: Config
 metadata:
   name: {{.ServiceName}}
 
+# Bazel Integration: NestJS service using Bazel for TypeScript compilation and OCI image building
 build:
   artifacts:
     - image: {{.ServiceName}}
-      docker:
-        dockerfile: Dockerfile
-        buildArgs:
-          NODE_VERSION: "22"
+      bazel:
+        target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
   tagPolicy:
     gitCommit:
       variant: AbbrevCommitSha
@@ -24,16 +23,16 @@ deploy:
         namespace: {{.WorkspaceName}}
         createNamespace: true
         setValueTemplates:
-          image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}}}"
-          image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}}}@{{`{{.IMAGE_DIGEST_`}}{{.ServiceName}}}}"
+          image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+          image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
 
 profiles:
   - name: local
     build:
       artifacts:
         - image: {{.ServiceName}}
-          docker:
-            dockerfile: Dockerfile
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
       local:
         push: false
     deploy:
@@ -48,15 +47,15 @@ profiles:
             setValues:
               image.pullPolicy: IfNotPresent
             setValueTemplates:
-              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}}}"
-              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}}}"
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}`}}"
 
   - name: dev
     build:
       artifacts:
         - image: {{.ServiceName}}
-          docker:
-            dockerfile: Dockerfile
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
       googleCloudBuild:
         projectId: <no value>
     deploy:
@@ -69,15 +68,15 @@ profiles:
             namespace: dev
             createNamespace: true
             setValueTemplates:
-              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}}}"
-              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}}}@{{`{{.IMAGE_DIGEST_`}}{{.ServiceName}}}}"
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
 
   - name: prod
     build:
       artifacts:
         - image: {{.ServiceName}}
-          docker:
-            dockerfile: Dockerfile
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
       googleCloudBuild:
         projectId: <no value>
     deploy:
@@ -90,15 +89,15 @@ profiles:
             namespace: prod
             createNamespace: true
             setValueTemplates:
-              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}}}"
-              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}}}@{{`{{.IMAGE_DIGEST_`}}{{.ServiceName}}}}"
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
 
   - name: cloudrun
     build:
       artifacts:
         - image: {{.ServiceName}}
-          docker:
-            dockerfile: Dockerfile
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
       googleCloudBuild:
         projectId: <no value>
     deploy:

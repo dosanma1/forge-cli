@@ -41,6 +41,15 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("application name is required")
 	}
 
+	// Check prerequisites
+	if err := CheckNodeJS(); err != nil {
+		return err
+	}
+	
+	if err := CheckNPM(); err != nil {
+		return err
+	}
+
 	// Validate name
 	if err := workspace.ValidateName(appName); err != nil {
 		return fmt.Errorf("invalid application name: %w", err)
@@ -142,12 +151,54 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("failed to update app styles.css: %w", err)
 	}
 
+	// Prompt for deployment target
+	fmt.Printf("\n🚀 Select deployment target for %s:\n", appName)
+	fmt.Println("  1) Firebase (Static hosting)")
+	fmt.Println("  2) GKE (Kubernetes with Helm)")
+	fmt.Println("  3) Cloud Run (Containerized)")
+	fmt.Print("Enter choice (1-3): ")
+
+	var choice int
+	if _, err := fmt.Scanln(&choice); err != nil {
+		choice = 1 // Default to Firebase
+	}
+
+	deploymentTarget := "firebase"
+	switch choice {
+	case 2:
+		deploymentTarget = "gke"
+	case 3:
+		deploymentTarget = "cloudrun"
+	default:
+		deploymentTarget = "firebase"
+	}
+
+	// Generate environment files
+	if err := g.generateEnvironmentFiles(appDir, appName, deploymentTarget); err != nil {
+		return fmt.Errorf("failed to generate environment files: %w", err)
+	}
+
+	// Generate deployment configuration based on target
+	if err := g.generateDeploymentConfig(opts.OutputDir, appName, deploymentTarget, config); err != nil {
+		return fmt.Errorf("failed to generate deployment config: %w", err)
+	}
+
+	// Generate BUILD.bazel for Bazel builds
+	if err := g.generateFrontendBuildFile(appDir, appName, deploymentTarget); err != nil {
+		return fmt.Errorf("failed to generate BUILD.bazel: %w", err)
+	}
+
 	// Add project to workspace config
 	project := &workspace.Project{
 		Name: appName,
 		Type: workspace.ProjectTypeAngularApp,
 		Root: fmt.Sprintf("frontend/projects/%s", appName),
-		Tags: []string{"frontend", "angular"},
+		Tags: []string{"frontend", "angular", deploymentTarget},
+		Metadata: map[string]interface{}{
+			"deployment": map[string]interface{}{
+				"target": deploymentTarget,
+			},
+		},
 	}
 
 	if err := config.AddProject(project); err != nil {
@@ -254,5 +305,25 @@ func (g *FrontendGenerator) updateAngularJsonSchematics(frontendDir string) erro
 		fmt.Println("  ✓ Added Angular schematics defaults")
 	}
 
+	return nil
+}
+
+// generateFrontendBuildFile creates BUILD.bazel for frontend app
+func (g *FrontendGenerator) generateFrontendBuildFile(appDir, appName, deploymentTarget string) error {
+	buildFilePath := filepath.Join(appDir, "BUILD.bazel")
+
+	content, err := g.engine.RenderTemplate("frontend/BUILD.bazel.tmpl", map[string]interface{}{
+		"AppName":          appName,
+		"DeploymentTarget": deploymentTarget,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to render BUILD.bazel template: %w", err)
+	}
+
+	if err := os.WriteFile(buildFilePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write BUILD.bazel: %w", err)
+	}
+
+	fmt.Printf("  ✓ Generated BUILD.bazel for Bazel builds\n")
 	return nil
 }

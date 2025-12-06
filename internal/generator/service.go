@@ -288,6 +288,11 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		return fmt.Errorf("failed to save workspace config: %w", err)
 	}
 
+	// Update root skaffold.yaml
+	if err := updateRootSkaffold(opts.OutputDir, servicesPath, serviceName); err != nil {
+		return fmt.Errorf("failed to update root skaffold.yaml: %w", err)
+	}
+
 	// Run go mod tidy automatically
 	fmt.Printf("📦 Running go mod tidy for %s...\n", serviceName)
 	if err := g.runGoModTidy(serviceDir); err != nil {

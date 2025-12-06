@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dosanma1/forge-cli/internal/template"
 	"github.com/dosanma1/forge-cli/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 var (
-	syncVerbose bool
+	syncVerbose          bool
+	syncRefreshTemplates bool
 )
 
 var syncCmd = &cobra.Command{
@@ -27,13 +29,15 @@ This command:
 - Ensures all configurations are in sync
 
 Examples:
-  forge sync                    # Sync entire workspace
-  forge sync --verbose          # Show detailed output`,
+  forge sync                      # Sync entire workspace
+  forge sync --verbose            # Show detailed output
+  forge sync --refresh-templates  # Clear and re-fetch templates from forge repo`,
 	RunE: runSync,
 }
 
 func init() {
 	syncCmd.Flags().BoolVarP(&syncVerbose, "verbose", "v", false, "Show verbose output")
+	syncCmd.Flags().BoolVar(&syncRefreshTemplates, "refresh-templates", false, "Clear template cache and re-fetch from forge repo")
 	rootCmd.AddCommand(syncCmd)
 }
 
@@ -49,34 +53,87 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
 
+	// Handle template refresh if requested
+	if syncRefreshTemplates {
+		fmt.Println("🗑️  Clearing template cache...")
+		forgeVersion := config.Workspace.ForgeVersion
+		if forgeVersion == "" {
+			forgeVersion = "1.0.0" // default version
+		}
+		if err := template.ClearTemplateCache(forgeVersion); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to clear template cache: %v\n", err)
+		} else {
+			fmt.Println("✓ Template cache cleared")
+		}
+	}
+
 	fmt.Println("🔄 Synchronizing workspace dependencies...")
 
-	// 1. Run go mod tidy for all services
+	// 1. Run go mod tidy at workspace root (creates go.sum for Bazel)
+	if err := syncWorkspaceRoot(workspaceDir); err != nil {
+		return err
+	}
+
+	// 2. Run go mod tidy for all services
 	if err := syncGoServices(workspaceDir, config); err != nil {
 		return err
 	}
 
-	// 2. Run npm install for frontend if exists
+	// 3. Run npm install for frontend if exists
 	if err := syncFrontend(workspaceDir, config); err != nil {
 		return err
 	}
 
-	// 3. Update go.work
+	// 4. Update go.work
 	if err := updateGoWork(workspaceDir, config); err != nil {
 		return err
 	}
 
-	// 4. Update MODULE.bazel
+	// 5. Run go work sync
+	if err := runGoWorkSync(workspaceDir); err != nil {
+		return err
+	}
+
+	// 6. Update MODULE.bazel
 	if err := updateModuleBazel(workspaceDir, config); err != nil {
 		return err
 	}
 
-	// 5. Update skaffold.yaml
+	// 7. Update skaffold.yaml
 	if err := updateSkaffold(workspaceDir, config); err != nil {
 		return err
 	}
 
 	fmt.Println("\n✅ Workspace synchronized successfully!")
+	return nil
+}
+
+func syncWorkspaceRoot(workspaceDir string) error {
+	goModPath := filepath.Join(workspaceDir, "go.mod")
+
+	// Check if workspace has a go.mod
+	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
+		if syncVerbose {
+			fmt.Println("  ℹ️  No workspace go.mod found")
+		}
+		return nil
+	}
+
+	fmt.Println("  📦 Running go mod tidy at workspace root...")
+
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = workspaceDir
+
+	if syncVerbose {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go mod tidy failed at workspace root: %w", err)
+	}
+
+	fmt.Println("  ✓ Workspace root synchronized")
 	return nil
 }
 
@@ -167,6 +224,35 @@ func syncFrontend(workspaceDir string, config *workspace.Config) error {
 	}
 
 	fmt.Println("  ✓ Frontend dependencies synchronized")
+	return nil
+}
+
+func runGoWorkSync(workspaceDir string) error {
+	goWorkPath := filepath.Join(workspaceDir, "go.work")
+
+	// Check if go.work exists
+	if _, err := os.Stat(goWorkPath); os.IsNotExist(err) {
+		if syncVerbose {
+			fmt.Println("  ℹ️  No go.work file found")
+		}
+		return nil
+	}
+
+	fmt.Println("  🔄 Running go work sync...")
+
+	cmd := exec.Command("go", "work", "sync")
+	cmd.Dir = workspaceDir
+
+	if syncVerbose {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go work sync failed: %w", err)
+	}
+
+	fmt.Println("  ✓ Go workspace synchronized")
 	return nil
 }
 

@@ -14,13 +14,16 @@ import (
 )
 
 var (
-	buildVerbose   bool
-	buildConfig    string
-	buildService   string
-	buildPush      bool
-	buildCI        bool
-	buildRegistry  string
-	buildPlatforms string
+	buildVerbose     bool
+	buildConfig      string
+	buildService     string
+	buildPush        bool
+	buildCI          bool
+	buildRegistry    string
+	buildPlatforms   string
+	buildNoSync      bool
+	buildFrontendOnly bool
+	buildServicesOnly bool
 )
 
 var buildCmd = &cobra.Command{
@@ -37,14 +40,17 @@ Environments (--config):
   prod    - Full optimization, no debug info
 
 Examples:
-  forge build                            # Build all (local config)
+  forge build                            # Build all (services + frontend, local config)
   forge build --config=prod              # Build all for production
   forge build --push                     # Build and push Docker images
   forge build --ci                       # CI mode (clean logs, prod config)
   forge build api-server                 # Build specific service
   forge build api-server worker          # Build multiple services
   forge build --config=dev --verbose     # Dev build with details
-  forge build --push --platforms=linux/amd64,linux/arm64  # Multi-arch`,
+  forge build --push --platforms=linux/amd64,linux/arm64  # Multi-arch
+  forge build --frontend-only            # Build only frontend apps
+  forge build --services-only            # Build only backend services
+  forge build --frontend-only web-app    # Build specific frontend app`,
 	RunE: runBuild,
 }
 
@@ -57,6 +63,9 @@ func init() {
 	buildCmd.Flags().BoolVar(&buildCI, "ci", false, "CI mode (clean logs, prod config, no progress)")
 	buildCmd.Flags().StringVar(&buildRegistry, "registry", "", "Override Docker registry from forge.json")
 	buildCmd.Flags().StringVar(&buildPlatforms, "platforms", "linux/amd64", "Target platforms for multi-arch builds")
+	buildCmd.Flags().BoolVar(&buildNoSync, "no-sync", false, "Skip automatic dependency synchronization")
+	buildCmd.Flags().BoolVar(&buildFrontendOnly, "frontend-only", false, "Build only frontend applications")
+	buildCmd.Flags().BoolVar(&buildServicesOnly, "services-only", false, "Build only backend services (skip frontend)")
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
@@ -80,6 +89,18 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not in a forge workspace: %w", err)
 	}
 
+	// Auto-sync dependencies unless --no-sync is specified
+	if !buildNoSync {
+		fmt.Println("🔄 Syncing dependencies...")
+		if err := runSyncQuiet(workspaceRoot); err != nil {
+			fmt.Printf("⚠️  Warning: Dependency sync failed: %v\n", err)
+			fmt.Println("   Build may fail. Try running 'forge sync' manually")
+			fmt.Println("   Or use --no-sync to skip this step\n")
+		} else {
+			fmt.Println("✓ Dependencies synchronized\n")
+		}
+	}
+
 	// Load workspace config
 	config, err := workspace.LoadConfig(workspaceRoot)
 	if err != nil {
@@ -101,13 +122,26 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	// Determine what to build
 	var targets []string
 
+	// Check for mutually exclusive flags
+	if buildFrontendOnly && buildServicesOnly {
+		return fmt.Errorf("cannot use --frontend-only and --services-only together")
+	}
+
 	if len(args) > 0 {
-		// Build specific services
-		for _, service := range args {
-			if buildPush {
-				targets = append(targets, fmt.Sprintf("//backend/services/%s:image", service))
-			} else {
-				targets = append(targets, serviceToTarget(service))
+		// Build specific services or frontend apps
+		if buildFrontendOnly {
+			// Build specific frontend apps
+			for _, appName := range args {
+				targets = append(targets, fmt.Sprintf("//frontend/projects/%s:build", appName))
+			}
+		} else {
+			// Build specific services
+			for _, service := range args {
+				if buildPush {
+					targets = append(targets, fmt.Sprintf("//backend/services/%s:image", service))
+				} else {
+					targets = append(targets, serviceToTarget(service))
+				}
 			}
 		}
 	} else if buildService != "" {
@@ -118,12 +152,25 @@ func runBuild(cmd *cobra.Command, args []string) error {
 			targets = append(targets, serviceToTarget(buildService))
 		}
 	} else {
-		// Build everything
-		if buildPush {
-			// Find all image targets
-			targets = append(targets, "//backend/services/...:image")
+		// Build everything (or filtered subset)
+		if buildFrontendOnly {
+			// Build all frontend apps
+			targets = append(targets, "//frontend/...")
+		} else if buildServicesOnly {
+			// Build only backend services
+			if buildPush {
+				targets = append(targets, "//backend/services/...:image")
+			} else {
+				targets = append(targets, "//backend/...")
+			}
 		} else {
-			targets = append(targets, "//...")
+			// Build everything (services + frontend)
+			if buildPush {
+				// Push only applies to services with images
+				targets = append(targets, "//backend/services/...:image")
+			} else {
+				targets = append(targets, "//...")
+			}
 		}
 	}
 
@@ -361,4 +408,104 @@ func findWorkspaceRoot() (string, error) {
 	}
 
 	return "", fmt.Errorf("not a forge workspace (no forge.json found)")
+}
+
+// runSyncQuiet runs sync without verbose output
+func runSyncQuiet(workspaceDir string) error {
+	// Load workspace config
+	config, err := workspace.LoadConfig(workspaceDir)
+	if err != nil {
+		return fmt.Errorf("failed to load workspace config: %w", err)
+	}
+
+	// Run go mod tidy at workspace root first
+	if err := syncWorkspaceRootQuiet(workspaceDir); err != nil {
+		return err
+	}
+
+	// Run go mod tidy for all services
+	if err := syncGoServicesQuiet(workspaceDir, config); err != nil {
+		return err
+	}
+
+	// Run npm install for frontend if exists
+	if err := syncFrontendQuiet(workspaceDir, config); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// syncWorkspaceRootQuiet runs go mod tidy at workspace root quietly
+func syncWorkspaceRootQuiet(workspaceDir string) error {
+	goModPath := filepath.Join(workspaceDir, "go.mod")
+
+	// Check if workspace has a go.mod
+	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = workspaceDir
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go mod tidy failed at workspace root: %w", err)
+	}
+
+	return nil
+}
+
+// syncGoServicesQuiet runs go mod tidy quietly
+func syncGoServicesQuiet(workspaceDir string, config *workspace.Config) error {
+	servicesDir := filepath.Join(workspaceDir, "backend", "services")
+	if _, err := os.Stat(servicesDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	entries, err := os.ReadDir(servicesDir)
+	if err != nil {
+		return fmt.Errorf("failed to read services directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		serviceName := entry.Name()
+		serviceDir := filepath.Join(servicesDir, serviceName)
+		goModPath := filepath.Join(serviceDir, "go.mod")
+
+		if _, err := os.Stat(goModPath); os.IsNotExist(err) {
+			continue
+		}
+
+		cmd := exec.Command("go", "mod", "tidy")
+		cmd.Dir = serviceDir
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("go mod tidy failed for %s: %w", serviceName, err)
+		}
+	}
+
+	return nil
+}
+
+// syncFrontendQuiet runs npm install quietly
+func syncFrontendQuiet(workspaceDir string, config *workspace.Config) error {
+	frontendDir := filepath.Join(workspaceDir, "frontend")
+	packageJsonPath := filepath.Join(frontendDir, "package.json")
+
+	if _, err := os.Stat(packageJsonPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	cmd := exec.Command("npm", "install")
+	cmd.Dir = frontendDir
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("npm install failed: %w", err)
+	}
+
+	return nil
 }

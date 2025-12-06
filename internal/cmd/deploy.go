@@ -13,15 +13,17 @@ import (
 )
 
 var (
-	deployEnv       string
-	deployMode      string
-	deployTarget    string
-	deployVerbose   bool
-	deployTail      bool
-	deployPort      int
-	deploySkipBuild bool
-	deployDryRun    bool
-	deployServices  string
+	deployEnv         string
+	deployMode        string
+	deployTarget      string
+	deployVerbose     bool
+	deployTail        bool
+	deployPort        int
+	deploySkipBuild   bool
+	deployDryRun      bool
+	deployServices    string
+	deployFrontendOnly bool
+	deployServicesOnly bool
 )
 
 var deployCmd = &cobra.Command{
@@ -44,12 +46,14 @@ Modes (--mode):
   debug   - Deploy with debugging enabled (K8s/GKE only)
 
 Examples:
-  forge deploy                              # Deploy to local (dev mode)
+  forge deploy                              # Deploy all to local (dev mode)
   forge deploy --env=dev                    # Deploy to dev environment
   forge deploy --env=prod --mode=run        # One-time prod deploy
   forge deploy --skip-build                 # Deploy pre-built images
   forge deploy --dry-run                    # Show what would be deployed
-  forge deploy --services=api,worker        # Deploy specific services only`,
+  forge deploy --services=api,worker        # Deploy specific services only
+  forge deploy --frontend-only              # Deploy only frontend apps
+  forge deploy --services-only              # Deploy only backend services`,
 	RunE: runDeploy,
 }
 
@@ -64,9 +68,16 @@ func init() {
 	deployCmd.Flags().BoolVar(&deploySkipBuild, "skip-build", false, "Skip build phase, deploy existing images")
 	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "Show what would be deployed without executing")
 	deployCmd.Flags().StringVar(&deployServices, "services", "", "Deploy specific services only (comma-separated)")
+	deployCmd.Flags().BoolVar(&deployFrontendOnly, "frontend-only", false, "Deploy only frontend applications")
+	deployCmd.Flags().BoolVar(&deployServicesOnly, "services-only", false, "Deploy only backend services (skip frontend)")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
+	// Check for mutually exclusive flags
+	if deployFrontendOnly && deployServicesOnly {
+		return fmt.Errorf("cannot use --frontend-only and --services-only together")
+	}
+
 	// Validate mode
 	validModes := map[string]bool{"dev": true, "run": true, "debug": true}
 	if !validModes[deployMode] {
@@ -127,9 +138,29 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Route to appropriate deployment function
 	switch target {
 	case "gke", "kubernetes":
-		return deployToKubernetes(workspaceRoot, config, envConfig)
+		if deployFrontendOnly {
+			return deployFrontendApps(workspaceRoot, config, envConfig, "gke")
+		} else if deployServicesOnly {
+			return deployToKubernetes(workspaceRoot, config, envConfig)
+		} else {
+			// Deploy both services and frontend
+			if err := deployToKubernetes(workspaceRoot, config, envConfig); err != nil {
+				return err
+			}
+			return deployFrontendApps(workspaceRoot, config, envConfig, "gke")
+		}
 	case "cloudrun":
-		return deployToCloudRun(workspaceRoot, config, envConfig)
+		if deployFrontendOnly {
+			return deployFrontendApps(workspaceRoot, config, envConfig, "cloudrun")
+		} else if deployServicesOnly {
+			return deployToCloudRun(workspaceRoot, config, envConfig)
+		} else {
+			// Deploy both services and frontend
+			if err := deployToCloudRun(workspaceRoot, config, envConfig); err != nil {
+				return err
+			}
+			return deployFrontendApps(workspaceRoot, config, envConfig, "cloudrun")
+		}
 	default:
 		return fmt.Errorf("unsupported target: %s", target)
 	}
@@ -770,5 +801,221 @@ func runServiceLocallyAsCloudRun(workspaceRoot, serviceName string, port int, co
 	}
 
 	fmt.Printf("   ✅ %s running at http://localhost:%d\n", serviceName, port)
+	return nil
+}
+
+// deployFrontendApps deploys frontend applications based on their deployment target
+func deployFrontendApps(workspaceRoot string, config *workspace.Config, envConfig workspace.EnvironmentConfig, target string) error {
+	fmt.Println("\n🌐 Deploying frontend applications...")
+
+	// Skip frontend deployment for local environment
+	if deployEnv == "local" {
+		fmt.Println("   ⏭️  Skipping frontend deployment for local environment")
+		fmt.Println("   💡 Use 'cd frontend && ng serve <app-name>' for local development")
+		return nil
+	}
+
+	// Find all frontend projects
+	var frontendProjects []*workspace.Project
+	for name := range config.Projects {
+		proj := config.Projects[name]
+		if proj.Type == workspace.ProjectTypeAngularApp {
+			// Make a copy to avoid reference issues
+			projCopy := proj
+			projCopy.Name = name
+			frontendProjects = append(frontendProjects, &projCopy)
+		}
+	}
+
+	if len(frontendProjects) == 0 {
+		fmt.Println("   ⏭️  No frontend applications found")
+		return nil
+	}
+
+	// Deploy each frontend app based on its deployment target
+	for _, proj := range frontendProjects {
+		// Get deployment target from metadata
+		deploymentTarget := "firebase" // default
+		if proj.Metadata != nil {
+			if deployment, ok := proj.Metadata["deployment"].(map[string]interface{}); ok {
+				if dt, ok := deployment["target"].(string); ok {
+					deploymentTarget = dt
+				}
+			}
+		}
+
+		fmt.Printf("\n   📦 Deploying %s (target: %s)\n", proj.Name, deploymentTarget)
+
+		switch deploymentTarget {
+		case "firebase":
+			if err := deployToFirebase(workspaceRoot, proj, envConfig); err != nil {
+				return fmt.Errorf("failed to deploy %s to Firebase: %w", proj.Name, err)
+			}
+		case "gke":
+			if err := deployFrontendToGKE(workspaceRoot, proj, envConfig); err != nil {
+				return fmt.Errorf("failed to deploy %s to GKE: %w", proj.Name, err)
+			}
+		case "cloudrun":
+			if err := deployFrontendToCloudRun(workspaceRoot, proj, envConfig, config); err != nil {
+				return fmt.Errorf("failed to deploy %s to Cloud Run: %w", proj.Name, err)
+			}
+		default:
+			fmt.Printf("   ⚠️  Unknown deployment target: %s, skipping\n", deploymentTarget)
+		}
+	}
+
+	fmt.Println("\n✅ Frontend deployment complete")
+	return nil
+}
+
+// deployToFirebase deploys a frontend app to Firebase Hosting
+func deployToFirebase(workspaceRoot string, proj *workspace.Project, envConfig workspace.EnvironmentConfig) error {
+	// Check if firebase CLI is installed
+	if _, err := exec.LookPath("firebase"); err != nil {
+		return fmt.Errorf("firebase CLI not found. Install with: npm install -g firebase-tools")
+	}
+
+	frontendDir := fmt.Sprintf("%s/frontend", workspaceRoot)
+
+	// Deploy using firebase deploy
+	deployArgs := []string{"deploy", "--only", fmt.Sprintf("hosting:%s", proj.Name)}
+	
+	if deployVerbose {
+		deployArgs = append(deployArgs, "--debug")
+	}
+
+	deployCmd := exec.Command("firebase", deployArgs...)
+	deployCmd.Dir = frontendDir
+	deployCmd.Stdout = os.Stdout
+	deployCmd.Stderr = os.Stderr
+
+	if err := deployCmd.Run(); err != nil {
+		return fmt.Errorf("firebase deploy failed: %w", err)
+	}
+
+	fmt.Printf("   ✅ Deployed to Firebase Hosting\n")
+	return nil
+}
+
+// deployFrontendToGKE deploys a frontend app to GKE using Helm
+func deployFrontendToGKE(workspaceRoot string, proj *workspace.Project, envConfig workspace.EnvironmentConfig) error {
+	// Build the frontend app first
+	if !deploySkipBuild {
+		fmt.Printf("   🔨 Building %s...\n", proj.Name)
+		buildCmd := exec.Command("bazel", "build", fmt.Sprintf("//frontend/projects/%s:build", proj.Name), "--config=prod")
+		buildCmd.Dir = workspaceRoot
+		if deployVerbose {
+			buildCmd.Stdout = os.Stdout
+			buildCmd.Stderr = os.Stderr
+		}
+		if err := buildCmd.Run(); err != nil {
+			return fmt.Errorf("build failed: %w", err)
+		}
+	}
+
+	// Deploy using Helm
+	helmChart := fmt.Sprintf("%s/infra/helm/frontend-service", workspaceRoot)
+	releaseName := fmt.Sprintf("frontend-%s", proj.Name)
+
+	helmArgs := []string{
+		"upgrade", "--install",
+		releaseName,
+		helmChart,
+		"--set", fmt.Sprintf("app.name=%s", proj.Name),
+		"--namespace", envConfig.Namespace,
+		"--create-namespace",
+	}
+
+	if deployVerbose {
+		helmArgs = append(helmArgs, "--debug")
+	}
+
+	helmCmd := exec.Command("helm", helmArgs...)
+	helmCmd.Dir = workspaceRoot
+	helmCmd.Stdout = os.Stdout
+	helmCmd.Stderr = os.Stderr
+
+	if err := helmCmd.Run(); err != nil {
+		return fmt.Errorf("helm deploy failed: %w", err)
+	}
+
+	fmt.Printf("   ✅ Deployed to GKE via Helm\n")
+	return nil
+}
+
+// deployFrontendToCloudRun deploys a frontend app to Cloud Run
+func deployFrontendToCloudRun(workspaceRoot string, proj *workspace.Project, envConfig workspace.EnvironmentConfig, config *workspace.Config) error {
+	// Build container image
+	if !deploySkipBuild {
+		fmt.Printf("   🔨 Building container for %s...\n", proj.Name)
+		buildCmd := exec.Command("bazel", "build", fmt.Sprintf("//frontend/projects/%s:image_tarball", proj.Name), "--config=prod")
+		buildCmd.Dir = workspaceRoot
+		if deployVerbose {
+			buildCmd.Stdout = os.Stdout
+			buildCmd.Stderr = os.Stderr
+		}
+		if err := buildCmd.Run(); err != nil {
+			return fmt.Errorf("container build failed: %w", err)
+		}
+
+		// Load image into docker
+		loadCmd := exec.Command("docker", "load", "-i", fmt.Sprintf("bazel-bin/frontend/projects/%s/image_tarball/tarball.tar", proj.Name))
+		loadCmd.Dir = workspaceRoot
+		if deployVerbose {
+			loadCmd.Stdout = os.Stdout
+			loadCmd.Stderr = os.Stderr
+		}
+		if err := loadCmd.Run(); err != nil {
+			return fmt.Errorf("failed to load image: %w", err)
+		}
+
+		// Tag and push to registry
+		registry := envConfig.Registry
+		if registry == "" && config.Workspace.Docker != nil {
+			registry = config.Workspace.Docker.Registry
+		}
+		imageName := fmt.Sprintf("%s/%s:latest", registry, proj.Name)
+
+		tagCmd := exec.Command("docker", "tag", fmt.Sprintf("%s:latest", proj.Name), imageName)
+		tagCmd.Dir = workspaceRoot
+		if err := tagCmd.Run(); err != nil {
+			return fmt.Errorf("failed to tag image: %w", err)
+		}
+
+		pushCmd := exec.Command("docker", "push", imageName)
+		pushCmd.Dir = workspaceRoot
+		pushCmd.Stdout = os.Stdout
+		pushCmd.Stderr = os.Stderr
+		if err := pushCmd.Run(); err != nil {
+			return fmt.Errorf("failed to push image: %w", err)
+		}
+	}
+
+	// Deploy to Cloud Run
+	registry := envConfig.Registry
+	if registry == "" && config.Workspace.Docker != nil {
+		registry = config.Workspace.Docker.Registry
+	}
+	imageName := fmt.Sprintf("%s/%s:latest", registry, proj.Name)
+
+	deployArgs := []string{
+		"run", "deploy",
+		proj.Name,
+		"--image", imageName,
+		"--region", envConfig.Region,
+		"--platform", "managed",
+		"--allow-unauthenticated",
+	}
+
+	gcloudCmd := exec.Command("gcloud", deployArgs...)
+	gcloudCmd.Dir = workspaceRoot
+	gcloudCmd.Stdout = os.Stdout
+	gcloudCmd.Stderr = os.Stderr
+
+	if err := gcloudCmd.Run(); err != nil {
+		return fmt.Errorf("gcloud run deploy failed: %w", err)
+	}
+
+	fmt.Printf("   ✅ Deployed to Cloud Run\n")
 	return nil
 }

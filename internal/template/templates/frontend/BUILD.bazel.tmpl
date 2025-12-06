@@ -1,0 +1,104 @@
+# BUILD.bazel for {{.AppName}} frontend application
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@aspect_rules_esbuild//esbuild:defs.bzl", "esbuild")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+
+# TypeScript compilation
+ts_project(
+    name = "ts_sources",
+    srcs = glob([
+        "src/**/*.ts",
+    ]),
+    declaration = True,
+    tsconfig = ":tsconfig.app.json",
+    deps = [
+        "//:node_modules/@angular/animations",
+        "//:node_modules/@angular/common",
+        "//:node_modules/@angular/compiler",
+        "//:node_modules/@angular/core",
+        "//:node_modules/@angular/forms",
+        "//:node_modules/@angular/platform-browser",
+        "//:node_modules/@angular/platform-browser-dynamic",
+        "//:node_modules/@angular/router",
+        "//:node_modules/rxjs",
+        "//:node_modules/tslib",
+        "//:node_modules/zone.js",
+    ],
+)
+
+# Bundle for production (with optimization)
+esbuild(
+    name = "bundle_prod",
+    srcs = [":ts_sources"],
+    entry_points = ["src/main.ts"],
+    minify = True,
+    sourcemap = False,
+    target = "es2020",
+    output = "main.js",
+    define = {
+        "process.env.NODE_ENV": '"production"',
+    },
+)
+
+# Bundle for development
+esbuild(
+    name = "bundle_dev",
+    srcs = [":ts_sources"],
+    entry_points = ["src/main.ts"],
+    minify = False,
+    sourcemap = True,
+    target = "es2020",
+    output = "main.js",
+    define = {
+        "process.env.NODE_ENV": '"development"',
+    },
+)
+
+# Static assets
+filegroup(
+    name = "static_assets",
+    srcs = glob([
+        "public/**/*",
+        "src/**/*.html",
+        "src/**/*.css",
+        "src/**/*.svg",
+        "src/**/*.png",
+        "src/**/*.jpg",
+        "src/**/*.ico",
+    ]),
+)
+
+# Production build output
+pkg_tar(
+    name = "dist_tar",
+    srcs = [
+        ":bundle_prod",
+        ":static_assets",
+    ],
+    package_dir = "/usr/share/nginx/html",
+)
+
+# Container image for deployment
+{{if eq .DeploymentTarget "gke" "cloudrun"}}
+oci_image(
+    name = "image",
+    base = "@nginx_alpine",
+    tars = [":dist_tar"],
+    entrypoint = ["nginx", "-g", "daemon off;"],
+)
+
+oci_tarball(
+    name = "image_tarball",
+    image = ":image",
+    repo_tags = ["{{.AppName}}:latest"],
+)
+{{end}}
+
+# Build target (for forge build)
+alias(
+    name = "build",
+    actual = ":bundle_prod",
+    visibility = ["//visibility:public"],
+)

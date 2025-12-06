@@ -1,0 +1,61 @@
+{
+  "version": "1",
+  "workspace": {
+    "name": "test-project",
+    "forgeVersion": "1.0.0",
+    "paths": {
+      "services": "backend/services",
+      "frontendApps": "frontend/projects",
+      "infrastructure": "infra",
+      "shared": "shared",
+      "docs": "docs"
+    }
+  },
+  "projects": {},
+  "environments": {
+    "dev": {
+      "name": "dev",
+      "description": "Development environment",
+      "target": "kubernetes",
+      "cluster": "your-dev-cluster",
+      "namespace": "dev",
+      "registry": "gcr.io/test-project"
+    },
+    "local": {
+      "name": "local",
+      "description": "Local development (kind/minikube)",
+      "target": "kubernetes",
+      "cluster": "kind-test-project",
+      "namespace": "default"
+    },
+    "prod": {
+      "name": "prod",
+      "description": "Production environment",
+      "target": "kubernetes",
+      "cluster": "your-prod-cluster",
+      "namespace": "production",
+      "registry": "gcr.io/test-project",
+      "region": "us-central1"
+    },
+    "staging": {
+      "name": "staging",
+      "description": "Staging environment",
+      "target": "kubernetes",
+      "cluster": "your-staging-cluster",
+      "namespace": "staging",
+      "registry": "gcr.io/test-project"
+    }
+  },
+  "infrastructure": {
+    "kubernetes": {
+      "cluster": "kind-test-project",
+      "namespace": "default"
+    },
+    "cloudrun": {
+      "region": "us-central1"
+    },
+    "kind": {
+      "configPath": "infra/kind-config.yaml"
+    }
+  }
+}

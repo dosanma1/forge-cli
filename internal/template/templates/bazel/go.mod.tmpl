@@ -1,11 +1,3 @@
 module github.com/{{.GitHubOrg}}/{{.ProjectName}}
 
 go {{.GoVersion}}
-
-// Include all workspace modules
-require (
-	github.com/{{.GitHubOrg}}/{{.ProjectName}}/shared v0.0.0
-)
-
-// Replace with local paths for development
-replace github.com/{{.GitHubOrg}}/{{.ProjectName}}/shared => ./shared

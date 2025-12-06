@@ -1,53 +1,61 @@
 """{{.ServiceName}} service BUILD configuration"""
 
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 package(default_visibility = ["//visibility:public"])
 
-# Export files for reference
-exports_files([
-    "Dockerfile",
-    "package.json",
-])
+# NPM dependencies
+js_library(
+    name = "node_modules",
+    srcs = ["//:node_modules"],
+)
 
-# Package the entire service directory for Docker build context
-pkg_tar(
-    name = "service_context",
+# TypeScript compilation
+ts_project(
+    name = "compile",
     srcs = glob([
-        "src/**/*",
-        "test/**/*",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.json",
-        "nest-cli.json",
-        ".eslintrc.js",
-        ".prettierrc",
+        "src/**/*.ts",
+        "test/**/*.ts",
     ]),
+    declaration = True,
+    source_map = True,
+    tsconfig = "tsconfig.json",
+    deps = [":node_modules"],
+)
+
+# Package compiled JavaScript and assets
+pkg_tar(
+    name = "app_layer",
+    srcs = [
+        ":compile",
+        "package.json",
+    ],
+    package_dir = "/app",
     strip_prefix = ".",
 )
 
-# Build OCI image
-# For NestJS, we rely on the Dockerfile for build (npm install, TypeScript compilation, etc.)
+# NestJS service OCI image using Bazel builder
 oci_image(
     name = "image",
-    base = "@node_image",
-    tars = [":service_context"],
-    entrypoint = ["node", "dist/main"],
-    exposed_ports = ["3000/tcp"],
+    base = "@distroless_nodejs",
+    entrypoint = ["node", "/app/dist/main.js"],
+    exposed_ports = ["3000"],
+    tars = [":app_layer"],
     env = {
         "NODE_ENV": "production",
         "PORT": "3000",
     },
-    workdir = "/app",
 )
 
-# Export image as Docker-format tarball for Skaffold compatibility
-oci_load(
-    name = "image.tar",
+# Export as tarball for Skaffold
+oci_tarball(
+    name = "image_tarball",
     image = ":image",
     repo_tags = ["{{.ServiceName}}:latest"],
-    format = "docker",
+)
 )
 
 # Extract the actual tarball file for Skaffold Bazel builder

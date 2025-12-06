@@ -36,7 +36,20 @@ oci.pull(
         "linux/arm64",
     ],
 )
+{{if .HasFrontend}}
+oci.pull(
+    name = "distroless_nodejs",
+    digest = "sha256:6893c8fa5c9d9c999566d0697c66ce23b5f86e6bb72679a9498bad57e23dfcb0",
+    image = "gcr.io/distroless/nodejs22-debian12",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64",
+    ],
+)
+use_repo(oci, "distroless_base", "distroless_nodejs")
+{{else}}
 use_repo(oci, "distroless_base")
+{{end}}
 
 # Go toolchain setup
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")

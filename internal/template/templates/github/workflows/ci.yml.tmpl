@@ -66,6 +66,66 @@ jobs:
       - name: Lint code
         run: forge lint
 
+  build-services:
+    name: Build Services
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    needs: [test, lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bazel
+        uses: bazel-contrib/setup-bazel@0.8.1
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: Build services
+        run: |
+          bazel build --config=prod //backend/...
+
+      - name: Cache Bazel outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+          key: ${{ runner.os }}-bazel-services-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-services-
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    needs: [test, lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bazel
+        uses: bazel-contrib/setup-bazel@0.8.1
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: Build frontend apps
+        run: |
+          bazel build --config=prod //frontend/...
+
+      - name: Cache Bazel outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+          key: ${{ runner.os }}-bazel-frontend-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-frontend-
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest

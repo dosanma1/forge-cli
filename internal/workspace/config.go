@@ -137,13 +137,14 @@ type KubernetesConfig struct {
 
 // Project represents a project in the workspace.
 type Project struct {
-	Name   string               `json:"name"`
-	Type   ProjectType          `json:"type"`
-	Root   string               `json:"root"`
-	Tags   []string             `json:"tags,omitempty"`
-	Build  *ProjectBuildConfig  `json:"build,omitempty"`
-	Deploy *ProjectDeployConfig `json:"deploy,omitempty"`
-	Local  *ProjectLocalConfig  `json:"local,omitempty"`
+	Name     string                 `json:"name"`
+	Type     ProjectType            `json:"type"`
+	Root     string                 `json:"root"`
+	Tags     []string               `json:"tags,omitempty"`
+	Build    *ProjectBuildConfig    `json:"build,omitempty"`
+	Deploy   *ProjectDeployConfig   `json:"deploy,omitempty"`
+	Local    *ProjectLocalConfig    `json:"local,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ProjectBuildConfig contains project-specific build configuration.

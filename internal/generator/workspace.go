@@ -200,7 +200,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		filepath.Join(workspaceDir, "backend/services"),
 		filepath.Join(workspaceDir, "infra/helm"),
 		filepath.Join(workspaceDir, "infra/cloudrun"),
-		filepath.Join(workspaceDir, "shared"),
 		filepath.Join(workspaceDir, "docs"),
 	}
 
@@ -307,6 +306,11 @@ Thumbs.db
 		return fmt.Errorf("failed to create .gitignore: %w", err)
 	}
 
+	// Create root skaffold.yaml
+	if err := g.createRootSkaffold(workspaceDir, workspaceName); err != nil {
+		return fmt.Errorf("failed to create skaffold.yaml: %w", err)
+	}
+
 	// Track created services and frontend for Bazel config
 	var createdServices []string
 	hasFrontend := false
@@ -362,24 +366,33 @@ Thumbs.db
 	// Generate frontend if requested
 	if opts.Data != nil {
 		if createFrontend, ok := opts.Data["create_frontend"].(bool); ok && createFrontend {
-			frontendAppName := "web-app" // default
-			if appName, ok := opts.Data["frontend_app_name"].(string); ok && appName != "" {
-				frontendAppName = appName
-			}
+			// Check Node.js prerequisites before attempting frontend generation
+			if err := CheckNodeJS(); err != nil {
+				fmt.Printf("\n⚠️  Skipping frontend generation - Node.js not found\n")
+				fmt.Printf("   %s\n", err.Error())
+			} else if err := CheckNPM(); err != nil {
+				fmt.Printf("\n⚠️  Skipping frontend generation - npm/npx not found\n")
+				fmt.Printf("   %s\n", err.Error())
+			} else {
+				frontendAppName := "web-app" // default
+				if appName, ok := opts.Data["frontend_app_name"].(string); ok && appName != "" {
+					frontendAppName = appName
+				}
 
-			fmt.Printf("\n🎨 Generating Angular frontend application: %s\n", frontendAppName)
+				fmt.Printf("\n🎨 Generating Angular frontend application: %s\n", frontendAppName)
 
-			hasFrontend = true
+				hasFrontend = true
 
-			frontendGen := NewFrontendGenerator()
-			frontendOpts := GeneratorOptions{
-				OutputDir: workspaceDir,
-				Name:      frontendAppName,
-				DryRun:    false,
-			}
+				frontendGen := NewFrontendGenerator()
+				frontendOpts := GeneratorOptions{
+					OutputDir: workspaceDir,
+					Name:      frontendAppName,
+					DryRun:    false,
+				}
 
-			if err := frontendGen.Generate(ctx, frontendOpts); err != nil {
-				return fmt.Errorf("failed to generate frontend: %w", err)
+				if err := frontendGen.Generate(ctx, frontendOpts); err != nil {
+					return fmt.Errorf("failed to generate frontend: %w", err)
+				}
 			}
 		}
 	}
@@ -478,9 +491,10 @@ func (g *WorkspaceGenerator) generateGitHubWorkflows(workspaceDir string) error 
 	}
 
 	workflows := map[string]string{
-		"ci.yml":              "github/workflows/ci.yml.tmpl",
-		"deploy-gke.yml":      "github/workflows/deploy-gke.yml.tmpl",
-		"deploy-cloudrun.yml": "github/workflows/deploy-cloudrun.yml.tmpl",
+		"ci.yml":                "github/workflows/ci.yml.tmpl",
+		"deploy-gke.yml":        "github/workflows/deploy-gke.yml.tmpl",
+		"deploy-cloudrun.yml":   "github/workflows/deploy-cloudrun.yml.tmpl",
+		"deploy-firebase.yml":   "github/workflows/deploy-firebase.yml.tmpl",
 	}
 
 	data := map[string]interface{}{
@@ -513,10 +527,6 @@ func (g *WorkspaceGenerator) generateInfrastructure(workspaceDir string) error {
 	}
 
 	projectName := config.Workspace.Name
-	registry := "gcr.io/your-project"
-	if config.Workspace.Docker != nil {
-		registry = config.Workspace.Docker.Registry
-	}
 
 	// Create kind-config.yaml
 	kindData := map[string]interface{}{
@@ -532,22 +542,8 @@ func (g *WorkspaceGenerator) generateInfrastructure(workspaceDir string) error {
 		return fmt.Errorf("failed to write kind-config.yaml: %w", err)
 	}
 
-	// Create skaffold.yaml
-	skaffoldData := map[string]interface{}{
-		"ProjectName":   projectName,
-		"Services":      []map[string]interface{}{}, // Empty initially
-		"HasAPIGateway": false,
-		"Registry":      registry,
-	}
-	skaffoldContent, err := g.engine.RenderTemplate("skaffold.yaml.tmpl", skaffoldData)
-	if err != nil {
-		return fmt.Errorf("failed to render skaffold.yaml: %w", err)
-	}
-
-	skaffoldPath := filepath.Join(workspaceDir, "skaffold.yaml")
-	if err := os.WriteFile(skaffoldPath, []byte(skaffoldContent), 0644); err != nil {
-		return fmt.Errorf("failed to write skaffold.yaml: %w", err)
-	}
+	// Note: Root skaffold.yaml is created by createRootSkaffold() called earlier in Generate()
+	// No need to create it here again to avoid duplication
 
 	// Create helm directory with README
 	helmDir := filepath.Join(infraDir, "helm")
@@ -761,6 +757,25 @@ func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []st
 	goWorkPath := filepath.Join(workspaceDir, "go.work")
 	if err := os.WriteFile(goWorkPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write go.work: %w", err)
+	}
+
+	return nil
+}
+
+// createRootSkaffold creates a minimal root skaffold.yaml file
+func (g *WorkspaceGenerator) createRootSkaffold(workspaceDir, workspaceName string) error {
+	data := map[string]interface{}{
+		"WorkspaceName": workspaceName,
+	}
+
+	content, err := g.engine.RenderTemplate("workspace/skaffold.yaml.tmpl", data)
+	if err != nil {
+		return fmt.Errorf("failed to render skaffold.yaml: %w", err)
+	}
+
+	skaffoldPath := filepath.Join(workspaceDir, "skaffold.yaml")
+	if err := os.WriteFile(skaffoldPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to create skaffold.yaml: %w", err)
 	}
 
 	return nil

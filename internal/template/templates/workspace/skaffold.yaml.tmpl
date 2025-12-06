@@ -1,0 +1,14 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: {{ .WorkspaceName }}-microservices
+
+# This root skaffold.yaml orchestrates all services via 'requires'.
+# Each service has its own skaffold.yaml with build and deployment configuration.
+# Services are automatically added to the requires section when generated.
+
+requires:
+build:
+  tagPolicy:
+    gitCommit:
+      variant: AbbrevCommitSha
