@@ -72,6 +72,13 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		Shared:         "shared",
 		Docs:           "docs",
 	}
+	config.Workspace.ToolVersions = &workspace.ToolVersions{
+		Angular: "21.0.2",
+		Go:      "1.23.4",
+		NestJS:  "11.1.9",
+		Node:    "24.11.1",
+		Bazel:   "7.4.1",
+	}
 
 	// Extract optional metadata from Data
 	var dockerRegistry, gcpProjectID, k8sNamespace string
@@ -284,6 +291,9 @@ node_modules/
 dist/
 .angular/
 
+# Forge
+.forge/
+
 # IDEs
 .vscode/
 .idea/
@@ -304,6 +314,11 @@ Thumbs.db
 	gitignorePath := filepath.Join(workspaceDir, ".gitignore")
 	if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644); err != nil {
 		return fmt.Errorf("failed to create .gitignore: %w", err)
+	}
+
+	// Create .github/dependabot.yml
+	if err := g.createDependabotConfig(workspaceDir); err != nil {
+		return fmt.Errorf("failed to create dependabot config: %w", err)
 	}
 
 	// Create root skaffold.yaml
@@ -399,7 +414,7 @@ Thumbs.db
 
 	// Update go.work to include generated services
 	if len(createdServices) > 0 {
-		if err := g.updateGoWork(workspaceDir, createdServices); err != nil {
+		if err := g.updateGoWork(workspaceDir, createdServices, config); err != nil {
 			return fmt.Errorf("failed to update go.work: %w", err)
 		}
 	}
@@ -459,13 +474,16 @@ func (g *WorkspaceGenerator) generateBazelFilesWithOrg(workspaceDir, workspaceNa
 	}
 
 	data := map[string]interface{}{
-		"ProjectName": workspaceName,
-		"Version":     "0.1.0",
-		"GoVersion":   "1.23",
-		"NodeVersion": "20.18.1",
-		"HasFrontend": hasFrontend,
-		"Services":    servicesData,
-		"GitHubOrg":   githubOrg,
+		"ProjectName":    workspaceName,
+		"Version":        "0.1.0",
+		"GoVersion":      "1.23.4",
+		"NodeVersion":    "24.11.1",
+		"AngularVersion": "21.0.2",
+		"NestJSVersion":  "11.1.9",
+		"BazelVersion":   "7.4.1",
+		"HasFrontend":    hasFrontend,
+		"Services":       servicesData,
+		"GitHubOrg":      githubOrg,
 	}
 
 	for filename, templatePath := range files {
@@ -735,7 +753,7 @@ func (g *WorkspaceGenerator) generateAPIGateway(workspaceDir, projectName string
 }
 
 // updateGoWork updates go.work to include generated services
-func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []string) error {
+func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []string, config *workspace.Config) error {
 	// Prepare service data for template
 	var services []map[string]interface{}
 	for _, name := range serviceNames {
@@ -745,7 +763,7 @@ func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []st
 	}
 
 	data := map[string]interface{}{
-		"GoVersion": "1.23",
+		"GoVersion": config.Workspace.ToolVersions.Go,
 		"Services":  services,
 	}
 
@@ -757,6 +775,26 @@ func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []st
 	goWorkPath := filepath.Join(workspaceDir, "go.work")
 	if err := os.WriteFile(goWorkPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write go.work: %w", err)
+	}
+
+	return nil
+}
+
+// createDependabotConfig creates .github/dependabot.yml for automated dependency updates
+func (g *WorkspaceGenerator) createDependabotConfig(workspaceDir string) error {
+	content, err := g.engine.RenderTemplate("github/dependabot.yml.tmpl", map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to render dependabot.yml: %w", err)
+	}
+
+	githubDir := filepath.Join(workspaceDir, ".github")
+	if err := os.MkdirAll(githubDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .github directory: %w", err)
+	}
+
+	dependabotPath := filepath.Join(githubDir, "dependabot.yml")
+	if err := os.WriteFile(dependabotPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to create dependabot.yml: %w", err)
 	}
 
 	return nil

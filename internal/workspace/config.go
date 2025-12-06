@@ -97,11 +97,21 @@ type ParallelConfig struct {
 type WorkspaceMetadata struct {
 	Name         string            `json:"name"`
 	ForgeVersion string            `json:"forgeVersion"`
+	ToolVersions *ToolVersions     `json:"toolVersions,omitempty"`
 	Paths        *WorkspacePaths   `json:"paths,omitempty"`
 	GitHub       *GitHubConfig     `json:"github,omitempty"`
 	Docker       *DockerConfig     `json:"docker,omitempty"`
 	GCP          *GCPConfig        `json:"gcp,omitempty"`
 	Kubernetes   *KubernetesConfig `json:"kubernetes,omitempty"`
+}
+
+// ToolVersions contains locked versions of framework tools.
+type ToolVersions struct {
+	Angular string `json:"angular,omitempty"` // Angular CLI and framework version
+	Go      string `json:"go,omitempty"`      // Go SDK version
+	NestJS  string `json:"nestjs,omitempty"`  // NestJS CLI and core version
+	Node    string `json:"node,omitempty"`    // Node.js version
+	Bazel   string `json:"bazel,omitempty"`   // Bazel build tool version
 }
 
 // WorkspacePaths contains workspace directory structure configuration.
