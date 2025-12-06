@@ -1,5 +1,9 @@
 # Forge Framework
 
+<p align="center">
+  <img src="assets/logo-cli.png" alt="Forge CLI Logo" width="200"/>
+</p>
+
 Forge is a comprehensive Go framework and CLI tool for building production-ready microservices with standardized patterns.
 
 ## Architecture
@@ -184,7 +188,7 @@ func TestAPI(t *testing.T) {
 
 	// Make requests
 	resp := server.GET("/api/users")
-	
+
 	// Assertions
 	testing.AssertStatusCode(t, resp, 200)
 	testing.AssertJSON(t, resp, map[string]interface{}{
@@ -238,6 +242,18 @@ Generate an Angular application:
 
 ```bash
 forge generate frontend admin-app
+```
+
+### `forge clean`
+
+Clean build artifacts and caches:
+
+```bash
+# Clean project caches (.forge, .angular) and run bazel clean --expunge
+forge clean --cache
+
+# Deep clean including global caches (with confirmation)
+forge clean --deep
 ```
 
 ### `forge add handler [service] [endpoint]` (Coming Soon)
@@ -313,10 +329,67 @@ my-project/
 
 ## Project Types
 
-- `go-service` - Go microservice
-- `angular-app` - Angular application
-- `shared-lib` - Shared Go library
-- `typescript-lib` - Shared TypeScript library
+- `go` - Go microservice
+- `nestjs` - NestJS microservice
+- `angular` - Angular application
+
+## Version Management
+
+Forge locks framework versions in `forge.json` to ensure consistent, reproducible builds across your team and CI/CD pipelines.
+
+### Tool Versions
+
+When you create a new workspace, Forge initializes locked versions in `forge.json`:
+
+```json
+{
+  "workspace": {
+    "toolVersions": {
+      "angular": "21.0.2",
+      "go": "1.23.4",
+      "nestjs": "11.1.9",
+      "node": "24.11.1",
+      "bazel": "7.4.1"
+    }
+  }
+}
+```
+
+### Why Lock Versions?
+
+1. **Stability** - Prevents `@latest` from introducing breaking changes unexpectedly
+2. **Bazel Compatibility** - Ensures framework versions work with Bazel build rules
+3. **Team Consistency** - Everyone builds with same versions
+4. **Reproducibility** - Builds work identically 6 months later
+
+### Updating Versions
+
+Forge uses Dependabot to monitor your project dependencies:
+
+1. Dependabot creates PRs for `go.mod` and `package.json` updates
+2. Review and merge Dependabot PRs after testing
+3. Manually sync versions to `forge.json` `toolVersions` section
+4. Run `forge build` to validate compatibility
+
+See [Version Compatibility Matrix](docs/VERSION_COMPATIBILITY.md) for tested combinations.
+
+### Cache Management
+
+Forge uses project-local caches (like Angular's `.angular/cache/`):
+
+```bash
+# Clean project caches and Bazel artifacts
+forge clean --cache
+
+# Deep clean (includes global caches: ~/.cache/bazel, ~/go/pkg/mod/cache, ~/.npm)
+forge clean --deep
+```
+
+Caches are stored in:
+
+- `.forge/cache/` - Template cache (gitignored)
+- `.angular/cache/` - Angular build cache (gitignored)
+- `~/.cache/bazel` - Bazel global cache
 
 ## Philosophy
 
