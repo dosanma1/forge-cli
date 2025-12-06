@@ -80,7 +80,7 @@ jobs:
         uses: bazel-contrib/setup-bazel@0.8.1
         with:
           bazelisk-cache: true
-          disk-cache: ${{"{{"}} github.workflow }}
+          disk-cache: ${{ "{{" }} github.workflow {{ "}}" }}
           repository-cache: true
 
       - name: Build services
@@ -92,9 +92,9 @@ jobs:
         with:
           path: |
             ~/.cache/bazel
-          key: ${{"{{"}} runner.os }}-bazel-services-${{"{{"}} github.sha }}
+          key: ${{ "{{" }} runner.os {{ "}}" }}-bazel-services-${{ "{{" }} github.sha {{ "}}" }}
           restore-keys: |
-            ${{"{{"}} runner.os }}-bazel-services-
+            ${{ "{{" }} runner.os {{ "}}" }}-bazel-services-
 
   build-frontend:
     name: Build Frontend
@@ -110,7 +110,7 @@ jobs:
         uses: bazel-contrib/setup-bazel@0.8.1
         with:
           bazelisk-cache: true
-          disk-cache: ${{"{{"}} github.workflow }}
+          disk-cache: ${{ "{{" }} github.workflow {{ "}}" }}
           repository-cache: true
 
       - name: Build frontend apps
@@ -122,9 +122,9 @@ jobs:
         with:
           path: |
             ~/.cache/bazel
-          key: ${{"{{"}} runner.os }}-bazel-frontend-${{"{{"}} github.sha }}
+          key: ${{ "{{" }} runner.os {{ "}}" }}-bazel-frontend-${{ "{{" }} github.sha {{ "}}" }}
           restore-keys: |
-            ${{"{{"}} runner.os }}-bazel-frontend-
+            ${{ "{{" }} runner.os {{ "}}" }}-bazel-frontend-
 
   security:
     name: Security Scan
