@@ -1,0 +1,44 @@
+# BUILD.bazel for frontend workspace root
+# Exports shared configuration files and node_modules for frontend apps
+
+# Export angular.json for all apps to reference
+exports_files([
+    "angular.json",
+    "package.json",
+    "tsconfig.json",
+])
+
+# Create filegroups that apps can depend on
+filegroup(
+    name = "angular_json",
+    srcs = ["angular.json"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "package_json",
+    srcs = ["package.json"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "tsconfig_json",
+    srcs = ["tsconfig.json"],
+    visibility = ["//visibility:public"],
+)
+
+# Export node_modules directory for genrules to use
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        ["node_modules/**/*"],
+        exclude = [
+            "node_modules/**/*.md",
+            "node_modules/**/*.markdown",
+            "node_modules/**/test/**",
+            "node_modules/**/tests/**",
+            "node_modules/**/*.map",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)

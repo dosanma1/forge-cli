@@ -1,104 +1,105 @@
 # BUILD.bazel for {{.AppName}} frontend application
-load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
-load("@aspect_rules_js//js:defs.bzl", "js_library")
-load("@aspect_rules_esbuild//esbuild:defs.bzl", "esbuild")
-load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+# Uses Angular CLI (ng build) via Bazel genrule
+# This allows Bazel to track dependencies while using the official Angular build system
 
-# TypeScript compilation
-ts_project(
-    name = "ts_sources",
-    srcs = glob([
-        "src/**/*.ts",
-    ]),
-    declaration = True,
-    tsconfig = ":tsconfig.app.json",
-    deps = [
-        "//:node_modules/@angular/animations",
-        "//:node_modules/@angular/common",
-        "//:node_modules/@angular/compiler",
-        "//:node_modules/@angular/core",
-        "//:node_modules/@angular/forms",
-        "//:node_modules/@angular/platform-browser",
-        "//:node_modules/@angular/platform-browser-dynamic",
-        "//:node_modules/@angular/router",
-        "//:node_modules/rxjs",
-        "//:node_modules/tslib",
-        "//:node_modules/zone.js",
-    ],
-)
-
-# Bundle for production (with optimization)
-esbuild(
-    name = "bundle_prod",
-    srcs = [":ts_sources"],
-    entry_points = ["src/main.ts"],
-    minify = True,
-    sourcemap = False,
-    target = "es2020",
-    output = "main.js",
-    define = {
-        "process.env.NODE_ENV": '"production"',
-    },
-)
-
-# Bundle for development
-esbuild(
-    name = "bundle_dev",
-    srcs = [":ts_sources"],
-    entry_points = ["src/main.ts"],
-    minify = False,
-    sourcemap = True,
-    target = "es2020",
-    output = "main.js",
-    define = {
-        "process.env.NODE_ENV": '"development"',
-    },
-)
-
-# Static assets
+# Track all source files for dependency detection
 filegroup(
-    name = "static_assets",
+    name = "sources",
     srcs = glob([
+        "src/**/*",
         "public/**/*",
-        "src/**/*.html",
-        "src/**/*.css",
-        "src/**/*.svg",
-        "src/**/*.png",
-        "src/**/*.jpg",
-        "src/**/*.ico",
+        "*.json",
+        "*.ts",
     ]),
+    visibility = ["//visibility:public"],
 )
 
-# Production build output
-pkg_tar(
-    name = "dist_tar",
+# Production build using Angular CLI
+genrule(
+    name = "ng_build_prod",
     srcs = [
-        ":bundle_prod",
-        ":static_assets",
+        ":sources",
+        "//frontend:angular_json",
+        "//frontend:package_json",
+        "//frontend:node_modules",
     ],
-    package_dir = "/usr/share/nginx/html",
+    outs = ["dist"],
+    cmd = """
+        # Setup environment
+        export HOME=$$PWD/.home
+        export NODE_OPTIONS="--max-old-space-size=4096"
+        mkdir -p $$HOME
+        
+        # Create working directory structure
+        WORK_DIR=$$PWD/build_tmp
+        mkdir -p $$WORK_DIR/frontend/projects/{{.AppName}}
+        
+        # Copy Angular workspace files
+        cp $(location //frontend:angular_json) $$WORK_DIR/frontend/angular.json
+        cp $(location //frontend:package_json) $$WORK_DIR/frontend/package.json
+        
+        # Copy source files
+        for src in $(SRCS); do
+            if [[ $$src != *"angular.json" ]] && [[ $$src != *"package.json" ]] && [[ $$src != *"node_modules"* ]]; then
+                cp -r $$src $$WORK_DIR/frontend/projects/{{.AppName}}/
+            fi
+        done
+        
+        # Link node_modules
+        ln -sf $$(realpath $(location //frontend:node_modules)) $$WORK_DIR/frontend/node_modules
+        
+        # Run Angular build
+        cd $$WORK_DIR/frontend
+        npx ng build {{.AppName}} --configuration=production --output-path=../../dist
+        
+        # Copy output to Bazel location
+        cp -r $$PWD/../../dist/* $@/
+    """,
+    visibility = ["//visibility:public"],
+    tags = ["no-cache"],
 )
 
-# Container image for deployment
-{{if eq .DeploymentTarget "gke" "cloudrun"}}
-oci_image(
-    name = "image",
-    base = "@nginx_alpine",
-    tars = [":dist_tar"],
-    entrypoint = ["nginx", "-g", "daemon off;"],
+# Development build using Angular CLI
+genrule(
+    name = "ng_build_dev",
+    srcs = [
+        ":sources",
+        "//frontend:angular_json",
+        "//frontend:package_json",
+        "//frontend:node_modules",
+    ],
+    outs = ["dist_dev"],
+    cmd = """
+        export HOME=$$PWD/.home
+        export NODE_OPTIONS="--max-old-space-size=4096"
+        mkdir -p $$HOME
+        
+        WORK_DIR=$$PWD/build_tmp
+        mkdir -p $$WORK_DIR/frontend/projects/{{.AppName}}
+        
+        cp $(location //frontend:angular_json) $$WORK_DIR/frontend/angular.json
+        cp $(location //frontend:package_json) $$WORK_DIR/frontend/package.json
+        
+        for src in $(SRCS); do
+            if [[ $$src != *"angular.json" ]] && [[ $$src != *"package.json" ]] && [[ $$src != *"node_modules"* ]]; then
+                cp -r $$src $$WORK_DIR/frontend/projects/{{.AppName}}/
+            fi
+        done
+        
+        ln -sf $$(realpath $(location //frontend:node_modules)) $$WORK_DIR/frontend/node_modules
+        
+        cd $$WORK_DIR/frontend
+        npx ng build {{.AppName}} --configuration=development --output-path=../../dist_dev
+        
+        cp -r $$PWD/../../dist_dev/* $@/
+    """,
+    visibility = ["//visibility:public"],
+    tags = ["no-cache"],
 )
 
-oci_tarball(
-    name = "image_tarball",
-    image = ":image",
-    repo_tags = ["{{.AppName}}:latest"],
-)
-{{end}}
-
-# Build target (for forge build)
+# Default build target (production)
 alias(
     name = "build",
-    actual = ":bundle_prod",
+    actual = ":ng_build_prod",
     visibility = ["//visibility:public"],
 )

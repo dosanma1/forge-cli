@@ -183,6 +183,13 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("failed to generate deployment config: %w", err)
 	}
 
+	// Generate frontend root BUILD.bazel if this is the first app
+	if isFirstApp {
+		if err := g.generateFrontendRootBuildFile(frontendDir); err != nil {
+			return fmt.Errorf("failed to generate frontend root BUILD.bazel: %w", err)
+		}
+	}
+
 	// Generate BUILD.bazel for Bazel builds
 	if err := g.generateFrontendBuildFile(appDir, appName, deploymentTarget); err != nil {
 		return fmt.Errorf("failed to generate BUILD.bazel: %w", err)
@@ -325,5 +332,28 @@ func (g *FrontendGenerator) generateFrontendBuildFile(appDir, appName, deploymen
 	}
 
 	fmt.Printf("  ✓ Generated BUILD.bazel for Bazel builds\n")
+	return nil
+}
+
+// generateFrontendRootBuildFile creates BUILD.bazel at frontend root for shared configs
+func (g *FrontendGenerator) generateFrontendRootBuildFile(frontendDir string) error {
+	buildFilePath := filepath.Join(frontendDir, "BUILD.bazel")
+
+	// Check if it already exists
+	if _, err := os.Stat(buildFilePath); err == nil {
+		fmt.Println("  ℹ️  Frontend root BUILD.bazel already exists, skipping")
+		return nil
+	}
+
+	content, err := g.engine.RenderTemplate("frontend-root/BUILD.bazel.tmpl", map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to render frontend root BUILD.bazel template: %w", err)
+	}
+
+	if err := os.WriteFile(buildFilePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write frontend root BUILD.bazel: %w", err)
+	}
+
+	fmt.Printf("  ✓ Generated frontend root BUILD.bazel for shared configs\n")
 	return nil
 }
