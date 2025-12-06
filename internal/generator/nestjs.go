@@ -206,7 +206,7 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 	// Register service in forge.json
 	project := workspace.Project{
 		Name: serviceName,
-		Type: workspace.ProjectTypeNestJSService,
+		Type: workspace.ProjectTypeNestJS,
 		Root: filepath.Join(servicesPath, serviceName),
 		Tags: []string{"backend", "nestjs", "service"},
 		Build: &workspace.ProjectBuildConfig{
@@ -217,20 +217,6 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		Deploy: &workspace.ProjectDeployConfig{
 			Targets:    []string{"helm", "cloudrun"},
 			ConfigPath: "deploy",
-			Helm: &workspace.ProjectDeployHelm{
-				Port:       3000,
-				HealthPath: "/health",
-			},
-			CloudRun: &workspace.ProjectDeployCloudRun{
-				Port:         3000,
-				CPU:          "1",
-				Memory:       "512Mi",
-				Concurrency:  80,
-				MinInstances: 0,
-				MaxInstances: 10,
-				Timeout:      "300s",
-				HealthPath:   "/health",
-			},
 		},
 		Local: &workspace.ProjectLocalConfig{
 			CloudRun: &workspace.ProjectLocalCloudRun{

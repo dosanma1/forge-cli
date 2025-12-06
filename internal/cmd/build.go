@@ -15,7 +15,7 @@ import (
 
 var (
 	buildVerbose      bool
-	buildConfig       string
+	buildEnv          string
 	buildService      string
 	buildPush         bool
 	buildCI           bool
@@ -34,19 +34,19 @@ var buildCmd = &cobra.Command{
 Bazel automatically detects changed files and only rebuilds affected targets.
 Use --push to build and push Docker images to the registry.
 
-Environments (--config):
-  local   - Fast builds, no optimization (default)
-  dev     - Some optimization, source maps
-  prod    - Full optimization, no debug info
+Environments (--env):
+  local      - Fast builds, no optimization (default)
+  development - Some optimization, source maps
+  production  - Full optimization, minified, no debug info
 
 Examples:
-  forge build                            # Build all (services + frontend, local config)
-  forge build --config=prod              # Build all for production
+  forge build                            # Build all (services + frontend, local env)
+  forge build --env=production           # Build all for production
   forge build --push                     # Build and push Docker images
-  forge build --ci                       # CI mode (clean logs, prod config)
+  forge build --ci                       # CI mode (clean logs, production env)
   forge build api-server                 # Build specific service
   forge build api-server worker          # Build multiple services
-  forge build --config=dev --verbose     # Dev build with details
+  forge build --env=development --verbose # Dev build with details
   forge build --push --platforms=linux/amd64,linux/arm64  # Multi-arch
   forge build --frontend-only            # Build only frontend apps
   forge build --services-only            # Build only backend services
@@ -57,7 +57,7 @@ Examples:
 func init() {
 	rootCmd.AddCommand(buildCmd)
 	buildCmd.Flags().BoolVarP(&buildVerbose, "verbose", "v", false, "Show detailed build output")
-	buildCmd.Flags().StringVarP(&buildConfig, "config", "c", "local", "Build configuration (local|dev|prod)")
+	buildCmd.Flags().StringVarP(&buildEnv, "env", "e", "production", "Build environment (local|development|production)")
 	buildCmd.Flags().StringVarP(&buildService, "service", "s", "", "Build specific service")
 	buildCmd.Flags().BoolVar(&buildPush, "push", false, "Build and push Docker images to registry")
 	buildCmd.Flags().BoolVar(&buildCI, "ci", false, "CI mode (clean logs, prod config, no progress)")
@@ -73,14 +73,8 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	// CI mode overrides
 	if buildCI {
-		buildConfig = "prod"
+		buildEnv = "prod"
 		buildVerbose = false
-	}
-
-	// Validate config
-	validConfigs := map[string]bool{"local": true, "dev": true, "prod": true}
-	if !validConfigs[buildConfig] {
-		return fmt.Errorf("invalid config: %s (must be local, dev, or prod)", buildConfig)
 	}
 
 	// Get workspace root
@@ -105,6 +99,15 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	config, err := workspace.LoadConfig(workspaceRoot)
 	if err != nil {
 		return fmt.Errorf("failed to load workspace config: %w", err)
+	}
+
+	// Validate environment exists in forge.json
+	if _, exists := config.Environments[buildEnv]; !exists {
+		availableEnvs := []string{}
+		for env := range config.Environments {
+			availableEnvs = append(availableEnvs, env)
+		}
+		return fmt.Errorf("environment '%s' not found in forge.json. Available: %v", buildEnv, availableEnvs)
 	}
 
 	// Determine registry
@@ -176,7 +179,12 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	// Build Bazel args with environment config
 	var bazelFlags []string
-	bazelFlags = append(bazelFlags, fmt.Sprintf("--config=%s", buildConfig))
+
+	// Resolve Angular configuration for frontend builds
+	angularConfig := resolveAngularConfig(config, buildEnv, buildVerbose)
+
+	// Pass resolved Angular config to Bazel for frontend builds
+	bazelFlags = append(bazelFlags, fmt.Sprintf("--define=ENV=%s", angularConfig))
 
 	// CI mode flags
 	if buildCI {
@@ -220,32 +228,32 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	// Show user-friendly message
-	configEmoji := map[string]string{
-		"local": "🏠",
-		"dev":   "🔧",
-		"prod":  "🚀",
+	envEmoji := map[string]string{
+		"local":       "🏠",
+		"development": "🔧",
+		"production":  "🚀",
 	}
-	emoji := configEmoji[buildConfig]
+	emoji := envEmoji[buildEnv]
 
 	if buildCI {
 		emoji = "🤖"
 	}
 
 	if buildVerbose {
-		fmt.Printf("%s Building with config '%s': %s\n", emoji, buildConfig, strings.Join(targets, ", "))
+		fmt.Printf("%s Building with environment '%s': %s\n", emoji, buildEnv, strings.Join(targets, ", "))
 	} else {
 		serviceNames := extractServiceNames(args)
 		if len(serviceNames) == 0 {
 			if buildPush {
-				fmt.Printf("%s Building and pushing images [%s]...\n", emoji, buildConfig)
+				fmt.Printf("%s Building and pushing images [%s]...\n", emoji, buildEnv)
 			} else {
-				fmt.Printf("%s Building all services [%s]...\n", emoji, buildConfig)
+				fmt.Printf("%s Building all services [%s]...\n", emoji, buildEnv)
 			}
 		} else {
 			if buildPush {
-				fmt.Printf("%s Building and pushing: %s [%s]\n", emoji, strings.Join(serviceNames, ", "), buildConfig)
+				fmt.Printf("%s Building and pushing: %s [%s]\n", emoji, strings.Join(serviceNames, ", "), buildEnv)
 			} else {
-				fmt.Printf("%s Building: %s [%s]\n", emoji, strings.Join(serviceNames, ", "), buildConfig)
+				fmt.Printf("%s Building: %s [%s]\n", emoji, strings.Join(serviceNames, ", "), buildEnv)
 			}
 		}
 	}
@@ -508,4 +516,27 @@ func syncFrontendQuiet(workspaceDir string, config *workspace.Config) error {
 	}
 
 	return nil
+}
+
+// resolveAngularConfig resolves the Angular configuration name for a given environment
+// It checks all Angular projects for their environmentMapper and returns the mapped config
+// Defaults to "production" if not mapped
+func resolveAngularConfig(config *workspace.Config, env string, verbose bool) string {
+	// Find first Angular project with environmentMapper
+	for name, project := range config.Projects {
+		if project.Type == workspace.ProjectTypeAngular && project.Build != nil && project.Build.EnvironmentMapper != nil {
+			if angularConfig, ok := project.Build.EnvironmentMapper[env]; ok {
+				if verbose {
+					fmt.Printf("  ℹ️  Angular project '%s': using config '%s' for environment '%s'\n", name, angularConfig, env)
+				}
+				return angularConfig
+			}
+		}
+	}
+
+	// Default to production if no mapping found
+	if verbose {
+		fmt.Printf("  ℹ️  No environment mapping found, defaulting to 'production'\n")
+	}
+	return "production"
 }

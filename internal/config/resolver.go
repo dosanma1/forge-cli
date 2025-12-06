@@ -61,20 +61,7 @@ func (r *Resolver) ResolvePort(projectName string, target string) int {
 		}
 	}
 
-	// Check deploy config
-	if project.Deploy != nil {
-		switch target {
-		case "cloudrun":
-			if project.Deploy.CloudRun != nil && project.Deploy.CloudRun.Port != 0 {
-				return project.Deploy.CloudRun.Port
-			}
-		case "gke", "kubernetes", "helm":
-			if project.Deploy.Helm != nil && project.Deploy.Helm.Port != 0 {
-				return project.Deploy.Helm.Port
-			}
-		}
-	}
-
+	// Deploy-specific port overrides are in deploy folder configs, not in forge.json
 	return getDefaultPort(project.Type)
 }
 
@@ -178,15 +165,15 @@ func (r *Resolver) ResolveConfigPath(projectName string) string {
 // getDefaultPort returns the default port based on project type.
 func getDefaultPort(projectType workspace.ProjectType) int {
 	switch projectType {
-	case workspace.ProjectTypeGoService:
+	case workspace.ProjectTypeGo:
 		return 8080
-	case workspace.ProjectTypeNestJSService:
+	case workspace.ProjectTypeNestJS:
 		return 3000
-	case workspace.ProjectTypeAngularApp:
+	case workspace.ProjectTypeAngular:
 		return 4200
-	case workspace.ProjectTypeReactApp:
+	case workspace.ProjectTypeReact:
 		return 3000
-	case workspace.ProjectTypeVueApp:
+	case workspace.ProjectTypeVue:
 		return 5173
 	default:
 		return 8080

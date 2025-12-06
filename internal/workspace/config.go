@@ -149,40 +149,21 @@ type Project struct {
 
 // ProjectBuildConfig contains project-specific build configuration.
 type ProjectBuildConfig struct {
-	GoVersion    string   `json:"goVersion,omitempty"`
-	NodeVersion  string   `json:"nodeVersion,omitempty"`
-	Registry     string   `json:"registry,omitempty"`
-	Dockerfile   string   `json:"dockerfile,omitempty"`
-	Platforms    []string `json:"platforms,omitempty"`
-	BuildCommand string   `json:"buildCommand,omitempty"`
-	OutputPath   string   `json:"outputPath,omitempty"`
+	GoVersion         string            `json:"goVersion,omitempty"`
+	NodeVersion       string            `json:"nodeVersion,omitempty"`
+	Registry          string            `json:"registry,omitempty"`
+	Dockerfile        string            `json:"dockerfile,omitempty"`
+	Platforms         []string          `json:"platforms,omitempty"`
+	BuildCommand      string            `json:"buildCommand,omitempty"`
+	OutputPath        string            `json:"outputPath,omitempty"`
+	EnvironmentMapper map[string]string `json:"environmentMapper,omitempty"` // Maps forge environments to build configs (Angular)
 }
 
 // ProjectDeployConfig contains project deployment configuration.
 type ProjectDeployConfig struct {
 	Targets    []string               `json:"targets,omitempty"`
 	ConfigPath string                 `json:"configPath,omitempty"`
-	Helm       *ProjectDeployHelm     `json:"helm,omitempty"`
-	CloudRun   *ProjectDeployCloudRun `json:"cloudrun,omitempty"`
 	Firebase   *ProjectDeployFirebase `json:"firebase,omitempty"`
-}
-
-// ProjectDeployHelm contains Helm deployment defaults for a project.
-type ProjectDeployHelm struct {
-	Port       int    `json:"port,omitempty"`
-	HealthPath string `json:"healthPath,omitempty"`
-}
-
-// ProjectDeployCloudRun contains Cloud Run deployment defaults for a project.
-type ProjectDeployCloudRun struct {
-	Port         int    `json:"port,omitempty"`
-	CPU          string `json:"cpu,omitempty"`
-	Memory       string `json:"memory,omitempty"`
-	Concurrency  int    `json:"concurrency,omitempty"`
-	MinInstances int    `json:"minInstances,omitempty"`
-	MaxInstances int    `json:"maxInstances,omitempty"`
-	Timeout      string `json:"timeout,omitempty"`
-	HealthPath   string `json:"healthPath,omitempty"`
 }
 
 // ProjectDeployFirebase contains Firebase deployment configuration for a project.
@@ -219,12 +200,12 @@ type ProjectLocalFirebase struct {
 type ProjectType string
 
 const (
-	ProjectTypeGoService     ProjectType = "go-service"
-	ProjectTypeNestJSService ProjectType = "nestjs-service"
-	ProjectTypeAngularApp    ProjectType = "angular-app"
-	ProjectTypeReactApp      ProjectType = "react-app"
-	ProjectTypeVueApp        ProjectType = "vue-app"
-	ProjectTypeSharedLib     ProjectType = "shared-lib"
+	ProjectTypeGo      ProjectType = "go"
+	ProjectTypeNestJS  ProjectType = "nestjs"
+	ProjectTypeAngular ProjectType = "angular"
+	ProjectTypeReact   ProjectType = "react"
+	ProjectTypeVue     ProjectType = "vue"
+	ProjectTypeShared  ProjectType = "shared"
 )
 
 // NewConfig creates a new workspace configuration.

@@ -16,9 +16,10 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-# Production build using Angular CLI
+# Angular build using Angular CLI with environment variable
+# Use --define ENV=production or --define ENV=development to control the build
 genrule(
-    name = "ng_build_prod",
+    name = "ng_build",
     srcs = [
         ":sources",
         "//frontend:angular_json",
@@ -36,6 +37,9 @@ genrule(
         
         # Store the execroot directory for tar output
         EXECROOT=$$PWD
+        
+        # Get environment from Bazel variable (defaults to production)
+        ENV=$${ENV:-production}
         
         # Create working directory structure
         WORK_DIR=$$PWD/build_tmp
@@ -75,9 +79,9 @@ genrule(
         NODE_MODULES_DIR=$$(dirname $$(dirname $$NODE_MODULES_FILE))
         ln -sf $$(realpath $$NODE_MODULES_DIR) $$WORK_DIR/frontend/node_modules
         
-        # Run Angular build
+        # Run Angular build with environment-specific configuration
         cd $$WORK_DIR/frontend
-        npx ng build {{.AppName}} --configuration=production --output-path=../../dist
+        npx ng build {{.AppName}} --configuration=$$ENV --output-path=../../dist
         
         # Create tar from output using absolute path from EXECROOT
         cd $$PWD/../../dist
@@ -87,76 +91,9 @@ genrule(
     tags = ["no-cache"],
 )
 
-# Development build using Angular CLI
-genrule(
-    name = "ng_build_dev",
-    srcs = [
-        ":sources",
-        "//frontend:angular_json",
-        "//frontend:package_json",
-        "//frontend:tsconfig_json",
-        "//frontend:node_modules",
-    ],
-    outs = ["dist_dev.tar.gz"],
-    output_to_bindir = 1,
-    cmd = """
-        export HOME=$$PWD/.home
-        export NODE_OPTIONS="--max-old-space-size=4096"
-        mkdir -p $$HOME
-        
-        # Store the execroot directory for tar output
-        EXECROOT=$$PWD
-        
-        WORK_DIR=$$PWD/build_tmp
-        APP_DIR=$$WORK_DIR/frontend/projects/{{.AppName}}
-        mkdir -p $$APP_DIR
-        
-        cp $(location //frontend:angular_json) $$WORK_DIR/frontend/angular.json
-        cp $(location //frontend:package_json) $$WORK_DIR/frontend/package.json
-        cp $(location //frontend:tsconfig_json) $$WORK_DIR/frontend/tsconfig.json
-        
-        # Copy source files preserving directory structure
-        for src in $(SRCS); do
-            # Skip workspace files and node_modules
-            if [[ $$src == *"angular.json" ]] || [[ $$src == *"package.json" ]] || [[ $$src == *"tsconfig.json" ]] || [[ $$src == *"node_modules"* ]]; then
-                continue
-            fi
-            
-            # Extract relative path from "frontend/projects/{{.AppName}}/"
-            rel_path=$${src#frontend/projects/{{.AppName}}/}
-            
-            # Create parent directory if needed
-            target_dir=$$(dirname "$$APP_DIR/$$rel_path")
-            mkdir -p "$$target_dir"
-            
-            # Copy file or directory
-            if [ -d "$$src" ]; then
-                cp -r "$$src" "$$target_dir/"
-            else
-                cp "$$src" "$$target_dir/"
-            fi
-        done
-        
-        # Link node_modules - find the parent directory containing all node_modules files
-        NODE_MODULES_FILE=$$(echo "$(locations //frontend:node_modules)" | awk '{print $$1}')
-        # Get the node_modules directory (file is in node_modules/.bin/*, so dirname twice)
-        NODE_MODULES_DIR=$$(dirname $$(dirname $$NODE_MODULES_FILE))
-        ln -sf $$(realpath $$NODE_MODULES_DIR) $$WORK_DIR/frontend/node_modules
-        
-        cd $$WORK_DIR/frontend
-        npx ng build {{.AppName}} --configuration=development --output-path=../../dist_dev
-        
-        # Create tar from output using absolute path from EXECROOT
-        cd $$PWD/../../dist_dev
-        tar -czf $$EXECROOT/$@ .
-    """,
-    visibility = ["//visibility:public"],
-    tags = ["no-cache"],
-)
-
-# Default build target (production)
+# Default build target
 alias(
     name = "build",
-    actual = ":ng_build_prod",
+    actual = ":ng_build",
     visibility = ["//visibility:public"],
 )

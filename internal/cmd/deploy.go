@@ -496,7 +496,7 @@ func deployToCloudRun(workspaceRoot string, config *workspace.Config, envConfig 
 	// Get list of services to deploy
 	services := []string{}
 	for name, project := range config.Projects {
-		if project.Type == "go-service" || project.Type == "service" {
+		if project.Type == "go" || project.Type == "service" {
 			services = append(services, name)
 		}
 	}
@@ -664,7 +664,7 @@ func showDeploymentPlan(workspaceRoot string, config *workspace.Config, envConfi
 	if err != nil {
 		// Fallback: list all services from config
 		for name, project := range config.Projects {
-			if project.Type == "go-service" {
+			if project.Type == "go" {
 				fmt.Printf("  • %s\n", name)
 			}
 		}
@@ -707,7 +707,7 @@ func deployCloudRunLocally(workspaceRoot string, cfg *workspace.Config, envConfi
 	// Get list of services to deploy
 	services := []string{}
 	for name, project := range cfg.Projects {
-		if project.Type == workspace.ProjectTypeGoService {
+		if project.Type == workspace.ProjectTypeGo {
 			services = append(services, name)
 		}
 	}
@@ -819,7 +819,7 @@ func deployFrontendApps(workspaceRoot string, config *workspace.Config, envConfi
 	var frontendProjects []*workspace.Project
 	for name := range config.Projects {
 		proj := config.Projects[name]
-		if proj.Type == workspace.ProjectTypeAngularApp {
+		if proj.Type == workspace.ProjectTypeAngular {
 			// Make a copy to avoid reference issues
 			projCopy := proj
 			projCopy.Name = name

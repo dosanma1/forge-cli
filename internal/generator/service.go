@@ -238,7 +238,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 	// Add project to workspace config
 	project := &workspace.Project{
 		Name: serviceName,
-		Type: workspace.ProjectTypeGoService,
+		Type: workspace.ProjectTypeGo,
 		Root: filepath.Join(servicesPath, serviceName),
 		Tags: []string{"backend", "service"},
 		Build: &workspace.ProjectBuildConfig{
@@ -249,20 +249,6 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		Deploy: &workspace.ProjectDeployConfig{
 			Targets:    []string{"helm", "cloudrun"},
 			ConfigPath: "deploy",
-			Helm: &workspace.ProjectDeployHelm{
-				Port:       8080,
-				HealthPath: "/healthz",
-			},
-			CloudRun: &workspace.ProjectDeployCloudRun{
-				Port:         8080,
-				CPU:          "1",
-				Memory:       "512Mi",
-				Concurrency:  80,
-				MinInstances: 0,
-				MaxInstances: 10,
-				Timeout:      "300s",
-				HealthPath:   "/healthz",
-			},
 		},
 		Local: &workspace.ProjectLocalConfig{
 			CloudRun: &workspace.ProjectLocalCloudRun{
@@ -333,7 +319,7 @@ func (g *ServiceGenerator) updateRootSkaffold(workspaceDir string, config *works
 	// Collect all services
 	var services []map[string]interface{}
 	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeGoService {
+		if project.Type == workspace.ProjectTypeGo {
 			services = append(services, map[string]interface{}{
 				"Name": project.Name,
 			})
@@ -370,7 +356,7 @@ func (g *ServiceGenerator) updateModuleBazel(workspaceDir string, config *worksp
 	// Collect all services
 	var services []map[string]interface{}
 	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeGoService {
+		if project.Type == workspace.ProjectTypeGo {
 			services = append(services, map[string]interface{}{
 				"Name": project.Name,
 			})
@@ -380,7 +366,7 @@ func (g *ServiceGenerator) updateModuleBazel(workspaceDir string, config *worksp
 	// Check if frontend exists
 	hasFrontend := false
 	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeAngularApp {
+		if project.Type == workspace.ProjectTypeAngular {
 			hasFrontend = true
 			break
 		}
@@ -413,7 +399,7 @@ func (g *ServiceGenerator) updateGoWork(workspaceDir string, config *workspace.C
 	// Collect all services
 	var services []map[string]interface{}
 	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeGoService {
+		if project.Type == workspace.ProjectTypeGo {
 			services = append(services, map[string]interface{}{
 				"Name": project.Name,
 			})

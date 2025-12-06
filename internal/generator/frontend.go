@@ -198,9 +198,17 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 	// Add project to workspace config
 	project := &workspace.Project{
 		Name: appName,
-		Type: workspace.ProjectTypeAngularApp,
+		Type: workspace.ProjectTypeAngular,
 		Root: fmt.Sprintf("frontend/projects/%s", appName),
 		Tags: []string{"frontend", "angular", deploymentTarget},
+		Build: &workspace.ProjectBuildConfig{
+			EnvironmentMapper: map[string]string{
+				"local":   "development",
+				"dev":     "development",
+				"staging": "production",
+				"prod":    "production",
+			},
+		},
 		Metadata: map[string]interface{}{
 			"deployment": map[string]interface{}{
 				"target": deploymentTarget,

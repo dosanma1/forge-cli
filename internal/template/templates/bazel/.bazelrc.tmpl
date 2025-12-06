@@ -32,6 +32,12 @@ build:dev --compilation_mode=dbg
 build:dev --define=ENV=dev
 build:dev --strip=never
 
+# Staging - full optimization like production
+build:staging --compilation_mode=opt
+build:staging --define=ENV=staging
+build:staging --strip=always
+build:staging --stamp
+
 # Production - full optimization, strip debug info
 build:prod --compilation_mode=opt
 build:prod --define=ENV=prod
