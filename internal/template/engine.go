@@ -34,6 +34,7 @@ func NewEngine() *Engine {
 			"lower":      strings.ToLower,
 			"title":      strings.Title,
 			"replace":    strings.ReplaceAll,
+			"raw":        func(s string) string { return s }, // Return raw string without escaping
 		},
 	}
 }
