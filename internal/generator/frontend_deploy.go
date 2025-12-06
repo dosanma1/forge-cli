@@ -69,7 +69,13 @@ func (g *FrontendGenerator) generateDeploymentConfig(workspaceDir, appName, depl
 // generateFirebaseConfig generates Firebase hosting configuration
 func (g *FrontendGenerator) generateFirebaseConfig(workspaceDir, appName string, config *workspace.Config) error {
 	frontendDir := filepath.Join(workspaceDir, "frontend")
-	
+
+	// Get project ID from config or use default
+	projectID := "your-project-id"
+	if config != nil && config.Workspace.GCP != nil && config.Workspace.GCP.ProjectID != "" {
+		projectID = config.Workspace.GCP.ProjectID
+	}
+
 	// Check if .firebaserc exists
 	firebasercPath := filepath.Join(frontendDir, ".firebaserc")
 	firebaseExists := false
@@ -81,10 +87,10 @@ func (g *FrontendGenerator) generateFirebaseConfig(workspaceDir, appName string,
 		// Create new .firebaserc with multi-site support
 		firebasercContent := `{
   "projects": {
-    "default": "` + config.Workspace.GCP.ProjectID + `"
+    "default": "` + projectID + `"
   },
   "targets": {
-    "` + config.Workspace.GCP.ProjectID + `": {
+    "` + projectID + `": {
       "hosting": {
         "` + appName + `": [
           "` + appName + `"

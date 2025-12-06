@@ -14,14 +14,14 @@ import (
 )
 
 var (
-	buildVerbose     bool
-	buildConfig      string
-	buildService     string
-	buildPush        bool
-	buildCI          bool
-	buildRegistry    string
-	buildPlatforms   string
-	buildNoSync      bool
+	buildVerbose      bool
+	buildConfig       string
+	buildService      string
+	buildPush         bool
+	buildCI           bool
+	buildRegistry     string
+	buildPlatforms    string
+	buildNoSync       bool
 	buildFrontendOnly bool
 	buildServicesOnly bool
 )

@@ -54,7 +54,7 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 	if err := CheckNodeJS(); err != nil {
 		return err
 	}
-	
+
 	if err := CheckNPM(); err != nil {
 		return err
 	}

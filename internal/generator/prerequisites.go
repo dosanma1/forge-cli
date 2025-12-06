@@ -10,10 +10,10 @@ import (
 
 // PrerequisiteError represents a missing or incompatible prerequisite.
 type PrerequisiteError struct {
-	Tool        string
-	MinVersion  string
+	Tool           string
+	MinVersion     string
 	CurrentVersion string
-	Message     string
+	Message        string
 }
 
 func (e *PrerequisiteError) Error() string {
@@ -26,18 +26,18 @@ func CheckNodeJS() error {
 	// Check if node command exists
 	cmd := exec.Command("node", "--version")
 	output, err := cmd.CombinedOutput()
-	
+
 	if err != nil {
 		return &PrerequisiteError{
 			Tool:    "Node.js",
 			Message: formatNodeJSMissingError(),
 		}
 	}
-	
+
 	// Parse version
 	version := strings.TrimSpace(string(output))
 	version = strings.TrimPrefix(version, "v") // Remove 'v' prefix (e.g., v20.0.0 -> 20.0.0)
-	
+
 	majorVersion, err := parseNodeVersion(version)
 	if err != nil {
 		return &PrerequisiteError{
@@ -52,7 +52,7 @@ Installation: %s
 `, version, getNodeInstallInstructions()),
 		}
 	}
-	
+
 	// Require Node.js 16+, warn if <18
 	if majorVersion < 16 {
 		return &PrerequisiteError{
@@ -68,12 +68,12 @@ Please upgrade Node.js: %s
 `, version, getNodeInstallInstructions()),
 		}
 	}
-	
+
 	// Warn if <18 but continue
 	if majorVersion < 18 {
 		fmt.Printf("⚠️  Warning: Node.js %s detected. Node.js 18+ is recommended for best compatibility.\n", version)
 	}
-	
+
 	return nil
 }
 
@@ -86,7 +86,7 @@ func CheckNPM() error {
 			Message: formatNPXMissingError(),
 		}
 	}
-	
+
 	return nil
 }
 
@@ -97,12 +97,12 @@ func parseNodeVersion(version string) (int, error) {
 	if len(parts) == 0 {
 		return 0, fmt.Errorf("invalid version format: %s", version)
 	}
-	
+
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return 0, fmt.Errorf("invalid major version: %s", parts[0])
 	}
-	
+
 	return major, nil
 }
 

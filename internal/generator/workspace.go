@@ -491,10 +491,10 @@ func (g *WorkspaceGenerator) generateGitHubWorkflows(workspaceDir string) error 
 	}
 
 	workflows := map[string]string{
-		"ci.yml":                "github/workflows/ci.yml.tmpl",
-		"deploy-gke.yml":        "github/workflows/deploy-gke.yml.tmpl",
-		"deploy-cloudrun.yml":   "github/workflows/deploy-cloudrun.yml.tmpl",
-		"deploy-firebase.yml":   "github/workflows/deploy-firebase.yml.tmpl",
+		"ci.yml":              "github/workflows/ci.yml.tmpl",
+		"deploy-gke.yml":      "github/workflows/deploy-gke.yml.tmpl",
+		"deploy-cloudrun.yml": "github/workflows/deploy-cloudrun.yml.tmpl",
+		"deploy-firebase.yml": "github/workflows/deploy-firebase.yml.tmpl",
 	}
 
 	data := map[string]interface{}{

@@ -45,7 +45,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 	if err := CheckNodeJS(); err != nil {
 		return err
 	}
-	
+
 	if err := CheckNPM(); err != nil {
 		return err
 	}

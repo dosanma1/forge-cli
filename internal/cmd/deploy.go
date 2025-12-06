@@ -13,15 +13,15 @@ import (
 )
 
 var (
-	deployEnv         string
-	deployMode        string
-	deployTarget      string
-	deployVerbose     bool
-	deployTail        bool
-	deployPort        int
-	deploySkipBuild   bool
-	deployDryRun      bool
-	deployServices    string
+	deployEnv          string
+	deployMode         string
+	deployTarget       string
+	deployVerbose      bool
+	deployTail         bool
+	deployPort         int
+	deploySkipBuild    bool
+	deployDryRun       bool
+	deployServices     string
 	deployFrontendOnly bool
 	deployServicesOnly bool
 )
@@ -879,7 +879,7 @@ func deployToFirebase(workspaceRoot string, proj *workspace.Project, envConfig w
 
 	// Deploy using firebase deploy
 	deployArgs := []string{"deploy", "--only", fmt.Sprintf("hosting:%s", proj.Name)}
-	
+
 	if deployVerbose {
 		deployArgs = append(deployArgs, "--debug")
 	}
