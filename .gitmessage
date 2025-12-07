@@ -1,0 +1,55 @@
+<type>(<scope>): <short summary>
+# ────────────────────────────────────────────────────────────────
+# SINGLE-LINE COMMIT MESSAGE POLICY
+# ────────────────────────────────────────────────────────────────
+# ⚠️  IMPORTANT: Use ONLY ONE LINE for commit messages
+# ⚠️  Delete the template line above and write your message
+# ⚠️  No body, no footer - keep it concise and descriptive
+#
+# Format: <type>(<scope>): <subject>
+# Max length: 72 characters
+#
+# ────────────────────────────────────────────────────────────────
+# TYPES (determines version bump):
+# ────────────────────────────────────────────────────────────────
+#   feat:     New feature                    → MINOR bump
+#   fix:      Bug fix                        → PATCH bump
+#   feat!:    Breaking feature               → MAJOR bump
+#   fix!:     Breaking bug fix               → MAJOR bump
+#   chore:    Maintenance/housekeeping       → PATCH bump
+#   docs:     Documentation only             → PATCH bump
+#   style:    Code style/formatting          → PATCH bump
+#   refactor: Code refactoring               → PATCH bump
+#   perf:     Performance improvement        → PATCH bump
+#   test:     Adding/updating tests          → PATCH bump
+#   ci:       CI/CD changes                  → PATCH bump
+#   build:    Build system changes           → PATCH bump
+#
+# ────────────────────────────────────────────────────────────────
+# SCOPES (optional but recommended):
+# ────────────────────────────────────────────────────────────────
+#   cli, generator, workspace, ui, api, build, deploy
+#
+# ────────────────────────────────────────────────────────────────
+# EXAMPLES (single-line only):
+# ────────────────────────────────────────────────────────────────
+#   feat(cli): add interactive TUI for workspace creation
+#   fix(generator): correct Angular project path resolution
+#   feat!(api): redesign authentication endpoints
+#   chore(deps): upgrade Angular to v21.0.2
+#   docs(readme): update installation instructions
+#   perf(build): optimize Bazel cache configuration
+#
+# ────────────────────────────────────────────────────────────────
+# RULES:
+# ────────────────────────────────────────────────────────────────
+# ✓ Use imperative mood: "add" not "added" or "adds"
+# ✓ Don't capitalize first letter of subject
+# ✓ No period at the end
+# ✓ Be descriptive but concise (max 72 chars)
+# ✓ For breaking changes, add "!" after type: feat!: or fix!:
+# ✗ NO multi-line messages
+# ✗ NO body text
+# ✗ NO footer text
+#
+# ────────────────────────────────────────────────────────────────
