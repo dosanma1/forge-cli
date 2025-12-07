@@ -205,30 +205,33 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 
 	// Register service in forge.json
 	project := workspace.Project{
-		Name: serviceName,
-		Type: workspace.ProjectTypeNestJS,
-		Root: filepath.Join(servicesPath, serviceName),
-		Tags: []string{"backend", "nestjs", "service"},
-		Build: &workspace.ProjectBuildConfig{
-			NodeVersion: "22.0.0",
-			Registry:    registry,
-			Dockerfile:  "Dockerfile",
-		},
-		Deploy: &workspace.ProjectDeployConfig{
-			Targets:    []string{"helm", "cloudrun"},
-			ConfigPath: "deploy",
-		},
-		Local: &workspace.ProjectLocalConfig{
-			CloudRun: &workspace.ProjectLocalCloudRun{
-				Port: 3000,
-				Env: map[string]string{
-					"NODE_ENV": "development",
+		ProjectType: "service",
+		Language:    "nestjs",
+		Root:        filepath.Join(servicesPath, serviceName),
+		Tags:        []string{"backend", "nestjs", "service"},
+		Architect: &workspace.Architect{
+			Build: &workspace.ArchitectTarget{
+				Builder: "@forge/nestjs:build",
+				Options: map[string]interface{}{
+					"nodeVersion": "22.0.0",
+					"registry":    registry,
+					"dockerfile":  "Dockerfile",
 				},
 			},
-			GKE: &workspace.ProjectLocalGKE{
-				Port: 3000,
-				Env: map[string]string{
-					"NODE_ENV": "development",
+			Serve: &workspace.ArchitectTarget{
+				Builder: "@forge/nestjs:serve",
+				Options: map[string]interface{}{
+					"port": 3000,
+				},
+			},
+			Deploy: &workspace.ArchitectTarget{
+				Deployer: "helm",
+				Options: map[string]interface{}{
+					"configPath": "deploy",
+					"port":       3000,
+					"env": map[string]string{
+						"NODE_ENV": "development",
+					},
 				},
 			},
 		},

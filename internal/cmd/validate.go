@@ -114,27 +114,13 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 // validateSemantics performs additional semantic validation beyond schema
 func validateSemantics(config *workspace.Config) error {
-	// Check if environments reference valid infrastructure
-	for envName, env := range config.Environments {
-		switch env.Target {
-		case "gke":
-			if config.Infrastructure.GKE == nil {
-				return fmt.Errorf("environment '%s' targets 'gke' but infrastructure.gke is not configured", envName)
-			}
-		case "kubernetes":
-			if config.Infrastructure.Kubernetes == nil {
-				return fmt.Errorf("environment '%s' targets 'kubernetes' but infrastructure.kubernetes is not configured", envName)
-			}
-		case "cloudrun":
-			if config.Infrastructure.CloudRun == nil {
-				return fmt.Errorf("environment '%s' targets 'cloudrun' but infrastructure.cloudrun is not configured", envName)
-			}
-		}
-	}
+	// Semantic validation for architect pattern
+	// Could add checks like:
+	// - All deployers referenced are valid
+	// - All builders referenced are valid
+	// - Options match expected schemas for each builder/deployer
 
-	// Check if registry is configured when using remote deployments
-	// Registry validation removed - now handled per-project in project.build.registry
-
+	// For now, just return nil as the JSON schema handles most validation
 	return nil
 }
 

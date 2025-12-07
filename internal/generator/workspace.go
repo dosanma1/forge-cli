@@ -63,16 +63,17 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 
 	// Create workspace configuration
 	config := workspace.NewConfig(workspaceName)
-	config.Schema = "./schemas/forge-config.v1.schema.json"
+	config.Schema = "https://raw.githubusercontent.com/dosanma1/forge-cli/main/schemas/forge-config.v1.schema.json"
+	config.NewProjectRoot = "."
 
-	// Initialize workspace paths
-	config.Workspace.Paths = &workspace.WorkspacePaths{
-		Services:       "backend/services",
-		FrontendApps:   fmt.Sprintf("frontend/apps/%s/projects", workspaceName),
-		Infrastructure: "infra",
-		Shared:         "shared",
-		Docs:           "docs",
+	// Initialize CLI config
+	config.CLI = &workspace.CLIConfig{
+		DefaultBuildEnvironment: "local",
 	}
+
+	// Initialize workspace paths (kept for internal structure, not exposed in config)
+	// Frontend apps are in frontend/apps/<workspace>/projects/<app>/
+	// Backend services are in backend/services/<service>/
 	config.Workspace.ToolVersions = &workspace.ToolVersions{
 		Angular: "21.0.2",
 		Go:      "1.23.4",
@@ -80,132 +81,12 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		Node:    "24.11.1",
 		Bazel:   "7.4.1",
 	}
-	config.Workspace.Defaults = &workspace.WorkspaceDefaults{
-		BuildEnvironment: "local",
-		AngularEnvironmentMapper: map[string]string{
-			"local":      "development",
-			"dev":        "development",
-			"staging":    "staging",
-			"prod":       "production",
-			"production": "production",
-		},
-	}
 
-	// Extract optional metadata from Data
-	var dockerRegistry, gcpProjectID, k8sNamespace string
+	// Store GitHub org if provided
 	if opts.Data != nil {
 		if githubOrg, ok := opts.Data["github_org"].(string); ok && githubOrg != "" {
 			config.Workspace.GitHub = &workspace.GitHubConfig{Org: githubOrg}
 		}
-		if registry, ok := opts.Data["docker_registry"].(string); ok && registry != "" {
-			dockerRegistry = registry
-			config.Workspace.Docker = &workspace.DockerConfig{Registry: registry}
-		}
-		if projectID, ok := opts.Data["gcp_project_id"].(string); ok && projectID != "" {
-			gcpProjectID = projectID
-			config.Workspace.GCP = &workspace.GCPConfig{ProjectID: projectID}
-		}
-		if namespace, ok := opts.Data["k8s_namespace"].(string); ok && namespace != "" {
-			k8sNamespace = namespace
-			config.Workspace.Kubernetes = &workspace.KubernetesConfig{Namespace: namespace}
-		}
-	}
-
-	// Set default registry if not provided
-	if dockerRegistry == "" {
-		if gcpProjectID != "" {
-			dockerRegistry = fmt.Sprintf("gcr.io/%s", gcpProjectID)
-		} else {
-			dockerRegistry = fmt.Sprintf("gcr.io/%s", workspaceName)
-		}
-	}
-
-	// Set default namespace
-	if k8sNamespace == "" {
-		k8sNamespace = "default"
-	}
-
-	// Initialize infrastructure configuration
-	config.Infrastructure = &workspace.InfrastructureConfig{
-		Kubernetes: &workspace.KubernetesInfra{
-			Cluster:   fmt.Sprintf("kind-%s", workspaceName),
-			Namespace: k8sNamespace,
-		},
-		CloudRun: &workspace.CloudRunInfra{
-			ProjectID: gcpProjectID,
-			Region:    "us-central1",
-		},
-		Kind: &workspace.KindInfra{
-			ConfigPath: "infra/kind-config.yaml",
-		},
-	}
-
-	// Add GKE infrastructure if GCP project is provided
-	if gcpProjectID != "" {
-		region := "us-central1" // default region
-		if opts.Data != nil {
-			if r, ok := opts.Data["gke_region"].(string); ok && r != "" {
-				region = r
-			}
-		}
-
-		clusterName := fmt.Sprintf("%s-cluster", workspaceName)
-		if opts.Data != nil {
-			if c, ok := opts.Data["gke_cluster"].(string); ok && c != "" {
-				clusterName = c
-			}
-		}
-
-		config.Infrastructure.GKE = &workspace.GKEInfra{
-			ProjectID:   gcpProjectID,
-			ClusterName: clusterName,
-			Region:      region,
-			Namespace:   k8sNamespace,
-			WorkloadIdentityProvider: fmt.Sprintf("projects/%s/locations/global/workloadIdentityPools/%s-pool/providers/%s-provider",
-				gcpProjectID, workspaceName, workspaceName),
-			ServiceAccount: fmt.Sprintf("%s-sa@%s.iam.gserviceaccount.com", workspaceName, gcpProjectID),
-		}
-	}
-
-	// Initialize default environments
-	defaultTarget := "kubernetes"
-	if gcpProjectID != "" {
-		defaultTarget = "gke" // Use GKE if GCP project is configured
-	}
-
-	config.Environments = map[string]workspace.EnvironmentConfig{
-		"local": {
-			Name:        "local",
-			Description: "Local development (kind/minikube)",
-			Target:      "kubernetes",
-			Cluster:     fmt.Sprintf("kind-%s", workspaceName),
-			Namespace:   "default",
-		},
-		"dev": {
-			Name:        "dev",
-			Description: "Development environment",
-			Target:      defaultTarget,
-			Cluster:     "your-dev-cluster",
-			Namespace:   "dev",
-			Registry:    dockerRegistry,
-		},
-		"staging": {
-			Name:        "staging",
-			Description: "Staging environment",
-			Target:      defaultTarget,
-			Cluster:     "your-staging-cluster",
-			Namespace:   "staging",
-			Registry:    dockerRegistry,
-		},
-		"prod": {
-			Name:        "prod",
-			Description: "Production environment",
-			Target:      defaultTarget,
-			Cluster:     "your-prod-cluster",
-			Namespace:   "production",
-			Registry:    dockerRegistry,
-			Region:      "us-central1",
-		},
 	}
 
 	// Save forge.json
@@ -213,7 +94,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		return fmt.Errorf("failed to save workspace config: %w", err)
 	}
 
-	// Create directory structure (without frontend for now)
+	// Create directory structure
 	directories := []string{
 		filepath.Join(workspaceDir, "backend/services"),
 		filepath.Join(workspaceDir, "infra/helm"),

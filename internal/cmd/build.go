@@ -89,9 +89,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		if err := runSyncQuiet(workspaceRoot); err != nil {
 			fmt.Printf("⚠️  Warning: Dependency sync failed: %v\n", err)
 			fmt.Println("   Build may fail. Try running 'forge sync' manually")
-			fmt.Println("   Or use --no-sync to skip this step\n")
+			fmt.Println("   Or use --no-sync to skip this step")
 		} else {
-			fmt.Println("✓ Dependencies synchronized\n")
+			fmt.Println("✓ Dependencies synchronized")
 		}
 	}
 
@@ -104,14 +104,8 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	// Check for stale tool versions
 	checkVersionStaleness(config)
 
-	// Validate environment exists in forge.json
-	if _, exists := config.Environments[buildEnv]; !exists {
-		availableEnvs := []string{}
-		for env := range config.Environments {
-			availableEnvs = append(availableEnvs, env)
-		}
-		return fmt.Errorf("environment '%s' not found in forge.json. Available: %v", buildEnv, availableEnvs)
-	}
+	// Environments are no longer validated here
+	// The architect pattern uses build/deploy targets directly
 
 	// Determine registry
 	registry := buildRegistry
@@ -521,18 +515,21 @@ func syncFrontendQuiet(workspaceDir string, config *workspace.Config) error {
 	return nil
 }
 
-// resolveAngularConfig resolves the Angular configuration name for a given environment
-// It checks all Angular projects for their environmentMapper and returns the mapped config
+// resolveAngularConfig resolves the Angular configuration name for a given environment.
+// Looks in architect.build.configurations for the environment mapping
 // Defaults to "production" if not mapped
 func resolveAngularConfig(config *workspace.Config, env string, verbose bool) string {
-	// Find first Angular project with environmentMapper
+	// Find first Angular project with build configurations
 	for name, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeAngular && project.Build != nil && project.Build.EnvironmentMapper != nil {
-			if angularConfig, ok := project.Build.EnvironmentMapper[env]; ok {
-				if verbose {
-					fmt.Printf("  ℹ️  Angular project '%s': using config '%s' for environment '%s'\n", name, angularConfig, env)
+		if project.Language == "angular" && project.Architect != nil && project.Architect.Build != nil {
+			if project.Architect.Build.Configurations != nil {
+				// Check if configuration for this environment exists
+				if _, ok := project.Architect.Build.Configurations[env]; ok {
+					if verbose {
+						fmt.Printf("  ℹ️  Angular project '%s': using config '%s'\n", name, env)
+					}
+					return env
 				}
-				return angularConfig
 			}
 		}
 	}

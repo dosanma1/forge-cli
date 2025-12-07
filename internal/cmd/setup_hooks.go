@@ -77,14 +77,12 @@ func runSetupHooks(cmd *cobra.Command, args []string) error {
 	setupESLint := contains(options, "ESLint (linting)")
 
 	// Check if package.json exists
-	hasPackageJSON := fileExists("package.json")
 	frontendDir := ""
 
-	if !hasPackageJSON {
+	if !fileExists("package.json") {
 		// Look for frontend/package.json
 		if fileExists("frontend/package.json") {
 			frontendDir = "frontend"
-			hasPackageJSON = true
 		} else {
 			// Create root package.json
 			fmt.Println("Creating root package.json...")

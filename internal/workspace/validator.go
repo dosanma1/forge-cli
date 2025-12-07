@@ -51,12 +51,8 @@ func (v *Validator) validateWorkspace(ws *WorkspaceMetadata) error {
 // validateProjects validates all projects.
 func (v *Validator) validateProjects(projects map[string]Project) error {
 	for name, project := range projects {
-		if err := v.validateProject(&project); err != nil {
+		if err := v.validateProject(name, &project); err != nil {
 			return fmt.Errorf("project %q: %w", name, err)
-		}
-
-		if name != project.Name {
-			return fmt.Errorf("project key %q does not match project name %q", name, project.Name)
 		}
 	}
 
@@ -64,12 +60,8 @@ func (v *Validator) validateProjects(projects map[string]Project) error {
 }
 
 // validateProject validates a single project.
-func (v *Validator) validateProject(project *Project) error {
-	if project.Name == "" {
-		return fmt.Errorf("project name is required")
-	}
-
-	if err := ValidateName(project.Name); err != nil {
+func (v *Validator) validateProject(name string, project *Project) error {
+	if err := ValidateName(name); err != nil {
 		return fmt.Errorf("invalid project name: %w", err)
 	}
 
@@ -77,8 +69,20 @@ func (v *Validator) validateProject(project *Project) error {
 		return fmt.Errorf("project root is required")
 	}
 
-	if !isValidProjectType(project.Type) {
-		return fmt.Errorf("invalid project type: %s", project.Type)
+	if project.ProjectType == "" {
+		return fmt.Errorf("projectType is required")
+	}
+
+	if !isValidProjectType(project.ProjectType) {
+		return fmt.Errorf("invalid project type: %s", project.ProjectType)
+	}
+
+	if project.Language == "" {
+		return fmt.Errorf("language is required")
+	}
+
+	if !isValidLanguage(project.Language) {
+		return fmt.Errorf("invalid language: %s", project.Language)
 	}
 
 	return nil
@@ -93,9 +97,19 @@ func ValidateName(name string) error {
 }
 
 // isValidProjectType checks if a project type is valid.
-func isValidProjectType(pt ProjectType) bool {
+func isValidProjectType(pt string) bool {
 	switch pt {
-	case ProjectTypeGo, ProjectTypeNestJS, ProjectTypeAngular:
+	case "application", "service", "library":
+		return true
+	default:
+		return false
+	}
+}
+
+// isValidLanguage checks if a language is valid.
+func isValidLanguage(lang string) bool {
+	switch lang {
+	case "go", "nestjs", "angular", "react", "vue":
 		return true
 	default:
 		return false

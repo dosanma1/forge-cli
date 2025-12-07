@@ -12,86 +12,34 @@ const ConfigFileName = "forge.json"
 
 // Config represents the workspace configuration.
 type Config struct {
-	Schema         string                       `json:"$schema,omitempty"`
-	Version        string                       `json:"version"`
-	Workspace      WorkspaceMetadata            `json:"workspace"`
-	Projects       map[string]Project           `json:"projects"`
-	Environments   map[string]EnvironmentConfig `json:"environments,omitempty"`
-	Infrastructure *InfrastructureConfig        `json:"infrastructure,omitempty"`
+	Schema         string             `json:"$schema,omitempty"`
+	Version        string             `json:"version"`
+	Workspace      WorkspaceMetadata  `json:"workspace"`
+	NewProjectRoot string             `json:"newProjectRoot,omitempty"`
+	Projects       map[string]Project `json:"projects"`
+	CLI            *CLIConfig         `json:"cli,omitempty"`
 }
 
-// Deprecated build config structures - kept for backward compatibility during migration
-type BuildConfig struct {
-	GoVersion   string          `json:"goVersion,omitempty"`
-	NodeVersion string          `json:"nodeVersion,omitempty"`
-	Registry    string          `json:"registry,omitempty"`
-	Platforms   []string        `json:"platforms,omitempty"`
-	TagPolicy   string          `json:"tagPolicy,omitempty"`
-	Cache       *CacheConfig    `json:"cache,omitempty"`
-	Parallel    *ParallelConfig `json:"parallel,omitempty"`
+// CLIConfig contains CLI configuration and defaults
+type CLIConfig struct {
+	DefaultBuildEnvironment string `json:"defaultBuildEnvironment,omitempty"`
 }
 
-// InfrastructureConfig contains infrastructure configuration.
-type InfrastructureConfig struct {
-	GKE        *GKEInfra        `json:"gke,omitempty"`
-	Kubernetes *KubernetesInfra `json:"kubernetes,omitempty"`
-	CloudRun   *CloudRunInfra   `json:"cloudrun,omitempty"`
-	Firebase   *FirebaseInfra   `json:"firebase,omitempty"`
-	Kind       *KindInfra       `json:"kind,omitempty"`
+// Architect contains build, serve, deploy, and test targets
+type Architect struct {
+	Build  *ArchitectTarget `json:"build,omitempty"`
+	Serve  *ArchitectTarget `json:"serve,omitempty"`
+	Deploy *ArchitectTarget `json:"deploy,omitempty"`
+	Test   *ArchitectTarget `json:"test,omitempty"`
 }
 
-// FirebaseInfra contains Firebase infrastructure config.
-type FirebaseInfra struct {
-	Projects map[string]string `json:"projects,omitempty"` // Environment name -> Firebase project ID
-}
-
-// KindInfra contains Kind (local Kubernetes) configuration.
-type KindInfra struct {
-	ConfigPath string `json:"configPath,omitempty"`
-}
-
-// GKEInfra contains Google Kubernetes Engine (GKE) infrastructure config.
-type GKEInfra struct {
-	ProjectID                string `json:"projectId,omitempty"`
-	ClusterName              string `json:"clusterName,omitempty"`
-	Region                   string `json:"region,omitempty"` // Use region for regional clusters
-	Namespace                string `json:"namespace,omitempty"`
-	WorkloadIdentityProvider string `json:"workloadIdentityProvider,omitempty"` // For CI/CD authentication
-	ServiceAccount           string `json:"serviceAccount,omitempty"`           // Service account email for Workload Identity
-}
-
-// KubernetesInfra contains generic Kubernetes infrastructure config (non-cloud provider).
-type KubernetesInfra struct {
-	Cluster   string `json:"cluster,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
-	Context   string `json:"context,omitempty"` // Kubeconfig context
-}
-
-// CloudRunInfra contains Cloud Run infrastructure config.
-type CloudRunInfra struct {
-	ProjectID string `json:"projectId,omitempty"`
-	Region    string `json:"region,omitempty"`
-}
-
-// EnvironmentConfig contains environment-specific deployment configuration.
-type EnvironmentConfig struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Target      string `json:"target,omitempty"` // "gke" | "cloudrun" | "kind"
-	Cluster     string `json:"cluster,omitempty"`
-	Namespace   string `json:"namespace,omitempty"`
-	Registry    string `json:"registry,omitempty"`
-	Region      string `json:"region,omitempty"`
-}
-
-// CacheConfig contains build cache configuration.
-type CacheConfig struct {
-	RemoteURL string `json:"remoteUrl,omitempty"`
-}
-
-// ParallelConfig contains parallel build configuration.
-type ParallelConfig struct {
-	Workers int `json:"workers,omitempty"`
+// ArchitectTarget represents a build/serve/deploy/test target
+type ArchitectTarget struct {
+	Builder              string                 `json:"builder,omitempty"`
+	Deployer             string                 `json:"deployer,omitempty"`
+	Options              map[string]interface{} `json:"options,omitempty"`
+	Configurations       map[string]interface{} `json:"configurations,omitempty"`
+	DefaultConfiguration string                 `json:"defaultConfiguration,omitempty"`
 }
 
 // WorkspaceMetadata contains workspace-level metadata.
@@ -155,75 +103,32 @@ type KubernetesConfig struct {
 
 // Project represents a project in the workspace.
 type Project struct {
-	Name     string                 `json:"name"`
-	Type     ProjectType            `json:"type"`
-	Root     string                 `json:"root"`
-	Tags     []string               `json:"tags,omitempty"`
-	Build    *ProjectBuildConfig    `json:"build,omitempty"`
-	Deploy   *ProjectDeployConfig   `json:"deploy,omitempty"`
-	Local    *ProjectLocalConfig    `json:"local,omitempty"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	ProjectType string                 `json:"projectType"`
+	Language    string                 `json:"language"`
+	Root        string                 `json:"root"`
+	Tags        []string               `json:"tags,omitempty"`
+	Architect   *Architect             `json:"architect,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// ProjectBuildConfig contains project-specific build configuration.
-type ProjectBuildConfig struct {
-	GoVersion         string            `json:"goVersion,omitempty"`
-	NodeVersion       string            `json:"nodeVersion,omitempty"`
-	Registry          string            `json:"registry,omitempty"`
-	Dockerfile        string            `json:"dockerfile,omitempty"`
-	Platforms         []string          `json:"platforms,omitempty"`
-	BuildCommand      string            `json:"buildCommand,omitempty"`
-	OutputPath        string            `json:"outputPath,omitempty"`
-	EnvironmentMapper map[string]string `json:"environmentMapper,omitempty"` // Maps forge environments to build configs (Angular)
-}
-
-// ProjectDeployConfig contains project deployment configuration.
-type ProjectDeployConfig struct {
-	Targets    []string               `json:"targets,omitempty"`
-	ConfigPath string                 `json:"configPath,omitempty"`
-	Firebase   *ProjectDeployFirebase `json:"firebase,omitempty"`
-}
-
-// ProjectDeployFirebase contains Firebase deployment configuration for a project.
-type ProjectDeployFirebase struct {
-	Project string `json:"project,omitempty"`
-	Site    string `json:"site,omitempty"`
-}
-
-// ProjectLocalConfig contains local development configuration overrides.
-type ProjectLocalConfig struct {
-	CloudRun *ProjectLocalCloudRun `json:"cloudrun,omitempty"`
-	GKE      *ProjectLocalGKE      `json:"gke,omitempty"`
-	Firebase *ProjectLocalFirebase `json:"firebase,omitempty"`
-}
-
-// ProjectLocalCloudRun contains local Cloud Run configuration.
-type ProjectLocalCloudRun struct {
-	Port int               `json:"port,omitempty"`
-	Env  map[string]string `json:"env,omitempty"`
-}
-
-// ProjectLocalGKE contains local Kubernetes configuration.
-type ProjectLocalGKE struct {
-	Port int               `json:"port,omitempty"`
-	Env  map[string]string `json:"env,omitempty"`
-}
-
-// ProjectLocalFirebase contains local Firebase configuration.
-type ProjectLocalFirebase struct {
-	Port int `json:"port,omitempty"`
-}
-
-// ProjectType represents the type of project.
-type ProjectType string
+// ProjectKind represents the kind of project
+type ProjectKind string
 
 const (
-	ProjectTypeGo      ProjectType = "go"
-	ProjectTypeNestJS  ProjectType = "nestjs"
-	ProjectTypeAngular ProjectType = "angular"
-	ProjectTypeReact   ProjectType = "react"
-	ProjectTypeVue     ProjectType = "vue"
-	ProjectTypeShared  ProjectType = "shared"
+	ProjectKindApplication ProjectKind = "application"
+	ProjectKindService     ProjectKind = "service"
+	ProjectKindLibrary     ProjectKind = "library"
+)
+
+// LanguageType represents the programming language/framework
+type LanguageType string
+
+const (
+	LanguageGo      LanguageType = "go"
+	LanguageNestJS  LanguageType = "nestjs"
+	LanguageAngular LanguageType = "angular"
+	LanguageReact   LanguageType = "react"
+	LanguageVue     LanguageType = "vue"
 )
 
 // NewConfig creates a new workspace configuration.
@@ -285,12 +190,12 @@ func (c *Config) SaveTo(path string) error {
 }
 
 // AddProject adds a project to the workspace.
-func (c *Config) AddProject(project *Project) error {
-	if _, exists := c.Projects[project.Name]; exists {
-		return fmt.Errorf("project %q already exists", project.Name)
+func (c *Config) AddProject(name string, project *Project) error {
+	if _, exists := c.Projects[name]; exists {
+		return fmt.Errorf("project %q already exists", name)
 	}
 
-	c.Projects[project.Name] = *project
+	c.Projects[name] = *project
 	return nil
 }
 

@@ -3,12 +3,10 @@ kind: Config
 metadata:
   name: {{ .WorkspaceName }}-microservices
 
-# This root skaffold.yaml orchestrates all services via 'requires'.
-# Each service has its own skaffold.yaml with build and deployment configuration.
-# Services are automatically added to the requires section when generated.
+# Root orchestrator skaffold.yaml
+# This file coordinates all service deployments via the 'requires' section.
+# Each service has its own skaffold.yaml with build/deploy configuration.
+# Services are automatically added when generated via 'forge generate service'.
 
-requires:
-build:
-  tagPolicy:
-    gitCommit:
-      variant: AbbrevCommitSha
+requires: []
+

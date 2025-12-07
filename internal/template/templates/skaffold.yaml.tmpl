@@ -3,64 +3,15 @@ kind: Config
 metadata:
   name: {{.ProjectName}}-microservices
 
-# Bazel Integration: This root skaffold.yaml orchestrates all services via 'requires'.
-# Each service uses Bazel builder for incremental builds (only changed services rebuild).
-# Bazel automatically handles caching, multi-platform builds, and change detection.
+# Root orchestrator skaffold.yaml
+# This file coordinates all service deployments via the 'requires' section.
+# Each service has its own skaffold.yaml with build/deploy configuration.
+# Services are automatically added when generated via 'forge generate service'.
 
 requires:
-{{range .Services -}}
-- path: backend/services/{{.Name}}
-{{end -}}
-{{if .HasAPIGateway -}}
-- path: infra/api-gateway
-{{end -}}
-
-build:
-  tagPolicy:
-    gitCommit:
-      variant: AbbrevCommitSha
-
-profiles:
-  - name: local
-    activation:
-      - kubeContext: kind-{{.ProjectName}}
-  
-  - name: dev
-    deploy:
-      helm:
-        releases:
 {{- range .Services}}
-          - name: {{.Name}}
-            chartPath: infra/helm/service
-            namespace: dev
-            setValues:
-              service.name: {{.Name}}
-              image.repository: {{$.Registry}}/{{.Name}}
+  - path: backend/services/{{.Name}}
 {{- end}}
-
-  - name: staging
-    deploy:
-      helm:
-        releases:
-{{- range .Services}}
-          - name: {{.Name}}
-            chartPath: infra/helm/service
-            namespace: staging
-            setValues:
-              service.name: {{.Name}}
-              image.repository: {{$.Registry}}/{{.Name}}
+{{- if .HasAPIGateway}}
+  - path: infra/api-gateway
 {{- end}}
-
-  - name: prod
-    deploy:
-      helm:
-        releases:
-{{- range .Services}}
-          - name: {{.Name}}
-            chartPath: infra/helm/service
-            namespace: prod
-            setValues:
-              service.name: {{.Name}}
-              image.repository: {{$.Registry}}/{{.Name}}
-{{- end}}
-

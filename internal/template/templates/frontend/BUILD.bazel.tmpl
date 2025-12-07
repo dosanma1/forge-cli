@@ -43,7 +43,7 @@ genrule(
         
         # Create working directory structure
         WORK_DIR=$$PWD/build_tmp
-        APP_DIR=$$WORK_DIR/frontend/projects/{{.AppName}}
+        APP_DIR=$$WORK_DIR/frontend/apps/{{.AppName}}
         mkdir -p $$APP_DIR
         
         # Copy Angular workspace files
@@ -58,8 +58,8 @@ genrule(
                 continue
             fi
             
-            # Extract relative path from "frontend/projects/{{.AppName}}/"
-            rel_path=$${src#frontend/projects/{{.AppName}}/}
+            # Extract relative path from "frontend/apps/{{.AppName}}/"
+            rel_path=$${src#frontend/apps/{{.AppName}}/}
             
             # Create parent directory if needed
             target_dir=$$(dirname "$$APP_DIR/$$rel_path")

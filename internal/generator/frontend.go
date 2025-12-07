@@ -61,9 +61,8 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
 
-	workspaceName := config.Workspace.Name
 	frontendDir := filepath.Join(opts.OutputDir, "frontend")
-	frontendAppDir := filepath.Join(frontendDir, "apps", workspaceName)
+	frontendAppDir := filepath.Join(frontendDir, "apps", appName)
 
 	if opts.DryRun {
 		fmt.Printf("Would create Angular application: %s\n", appName)
@@ -137,7 +136,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 
 	if err := g.runAngularCLI(frontendDir, config, []string{
 		"generate", "application", appName,
-		"--project-root=apps/" + workspaceName + "/projects/" + appName,
+		"--project-root=apps/" + appName,
 		"--routing=true",
 		"--style=css",
 		"--skip-tests=false",
@@ -147,7 +146,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 	}
 
 	// Update app's styles.css with Tailwind import
-	appDir := filepath.Join(frontendAppDir, "projects", appName)
+	appDir := frontendAppDir
 	appStylesPath := filepath.Join(appDir, "src", "styles.css")
 
 	stylesContent, err := g.engine.RenderTemplate("frontend/styles.css.tmpl", map[string]interface{}{})
@@ -199,18 +198,58 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("failed to generate BUILD.bazel: %w", err)
 	}
 
-	// Add project to workspace config
+	// Add project to workspace config with new architect pattern
 	project := &workspace.Project{
-		Name: appName,
-		Type: workspace.ProjectTypeAngular,
-		Root: fmt.Sprintf("frontend/apps/%s/projects/%s", workspaceName, appName),
-		Tags: []string{"frontend", "angular", deploymentTarget},
-		Build: &workspace.ProjectBuildConfig{
-			EnvironmentMapper: map[string]string{
-				"local":   "development",
-				"dev":     "development",
-				"staging": "production",
-				"prod":    "production",
+		ProjectType: "application",
+		Language:    "angular",
+		Root:        fmt.Sprintf("frontend/apps/%s", appName),
+		Tags:        []string{"frontend", "angular", deploymentTarget},
+		Architect: &workspace.Architect{
+			Build: &workspace.ArchitectTarget{
+				Builder: "@forge/angular:build",
+				Options: map[string]interface{}{
+					"outputPath": fmt.Sprintf("dist/%s", appName),
+					"environmentMapper": map[string]string{
+						"local":   "development",
+						"dev":     "development",
+						"staging": "production",
+						"prod":    "production",
+					},
+				},
+				Configurations: map[string]interface{}{
+					"production": map[string]interface{}{
+						"optimization": true,
+						"sourceMap":    false,
+					},
+					"development": map[string]interface{}{
+						"optimization": false,
+						"sourceMap":    true,
+					},
+					"local": map[string]interface{}{
+						"optimization": false,
+						"sourceMap":    true,
+					},
+				},
+				DefaultConfiguration: "production",
+			},
+			Serve: &workspace.ArchitectTarget{
+				Builder: "@forge/angular:serve",
+				Options: map[string]interface{}{
+					"port": 4200,
+					"host": "localhost",
+				},
+			},
+			Deploy: &workspace.ArchitectTarget{
+				Deployer: deploymentTarget,
+				Options: map[string]interface{}{
+					"configPath": fmt.Sprintf("deploy/%s", deploymentTarget),
+				},
+				Configurations: map[string]interface{}{
+					"production":  map[string]interface{}{},
+					"development": map[string]interface{}{},
+					"local":       map[string]interface{}{},
+				},
+				DefaultConfiguration: "production",
 			},
 		},
 		Metadata: map[string]interface{}{
@@ -220,7 +259,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		},
 	}
 
-	if err := config.AddProject(project); err != nil {
+	if err := config.AddProject(appName, project); err != nil {
 		return fmt.Errorf("failed to add project to config: %w", err)
 	}
 

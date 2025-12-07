@@ -1,15 +1,20 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "https://forge.dev/schemas/v1.0/config.json",
+    "$id": "https://raw.githubusercontent.com/dosanma1/forge-cli/main/schemas/forge-config.v1.schema.json",
     "title": "Forge Configuration",
     "description": "Configuration file for Forge framework workspaces",
     "type": "object",
     "required": [
         "version",
         "workspace",
+        "newProjectRoot",
         "projects"
     ],
     "properties": {
+        "$schema": {
+            "type": "string",
+            "description": "JSON Schema reference"
+        },
         "version": {
             "type": "string",
             "description": "Configuration schema version",
@@ -33,34 +38,29 @@
                     "description": "Forge framework version (semver)",
                     "pattern": "^\\d+\\.\\d+\\.\\d+$"
                 },
-                "paths": {
+                "toolVersions": {
                     "type": "object",
-                    "description": "Workspace directory structure configuration",
+                    "description": "Tool versions used in the workspace",
                     "properties": {
-                        "services": {
+                        "angular": {
                             "type": "string",
-                            "description": "Path to backend services directory",
-                            "default": "backend/services"
+                            "description": "Angular CLI version"
                         },
-                        "frontendApps": {
+                        "go": {
                             "type": "string",
-                            "description": "Path to frontend applications directory",
-                            "default": "frontend/projects"
+                            "description": "Go version"
                         },
-                        "infrastructure": {
+                        "nestjs": {
                             "type": "string",
-                            "description": "Path to infrastructure configurations",
-                            "default": "infra"
+                            "description": "NestJS version"
                         },
-                        "shared": {
+                        "node": {
                             "type": "string",
-                            "description": "Path to shared libraries",
-                            "default": "shared"
+                            "description": "Node.js version"
                         },
-                        "docs": {
+                        "bazel": {
                             "type": "string",
-                            "description": "Path to documentation",
-                            "default": "docs"
+                            "description": "Bazel version"
                         }
                     }
                 },
@@ -76,362 +76,438 @@
                 }
             }
         },
+        "newProjectRoot": {
+            "type": "string",
+            "description": "Root directory for new projects",
+            "default": "."
+        },
         "projects": {
             "type": "object",
             "description": "Projects in the workspace",
             "additionalProperties": {
-                "type": "object",
-                "required": [
-                    "name",
-                    "type",
-                    "root"
-                ],
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Project name (must be kebab-case)",
-                        "pattern": "^[a-z][a-z0-9-]*$"
-                    },
-                    "type": {
-                        "type": "string",
-                        "description": "Project type",
-                        "enum": [
-                            "go-service",
-                            "nestjs-service",
-                            "angular-app",
-                            "react-app",
-                            "vue-app",
-                            "shared-lib"
-                        ]
-                    },
-                    "root": {
-                        "type": "string",
-                        "description": "Relative path to project root"
-                    },
-                    "tags": {
-                        "type": "array",
-                        "description": "Tags for categorizing projects",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "build": {
+                "allOf": [
+                    {
                         "type": "object",
-                        "description": "Project-specific build configuration",
+                        "required": [
+                            "projectType",
+                            "language",
+                            "root"
+                        ],
                         "properties": {
-                            "goVersion": {
+                            "projectType": {
                                 "type": "string",
-                                "description": "Go version for this project"
+                                "description": "Type of project",
+                                "enum": [
+                                    "application",
+                                    "service",
+                                    "library"
+                                ]
                             },
-                            "nodeVersion": {
+                            "language": {
                                 "type": "string",
-                                "description": "Node.js version for this project"
+                                "description": "Primary language/framework",
+                                "enum": [
+                                    "go",
+                                    "nestjs",
+                                    "angular",
+                                    "react",
+                                    "vue"
+                                ]
                             },
-                            "registry": {
+                            "root": {
                                 "type": "string",
-                                "description": "Docker registry for this project"
+                                "description": "Relative path to project root"
                             },
-                            "dockerfile": {
-                                "type": "string",
-                                "description": "Path to Dockerfile relative to project root",
-                                "default": "Dockerfile"
-                            },
-                            "platforms": {
+                            "tags": {
                                 "type": "array",
-                                "description": "Target platforms for multi-arch builds",
+                                "description": "Tags for categorizing projects",
                                 "items": {
-                                    "type": "string",
-                                    "enum": [
-                                        "linux/amd64",
-                                        "linux/arm64"
-                                    ]
+                                    "type": "string"
                                 }
                             },
-                            "buildCommand": {
-                                "type": "string",
-                                "description": "Custom build command"
-                            },
-                            "outputPath": {
-                                "type": "string",
-                                "description": "Build output directory (for frontend apps)"
-                            }
-                        }
-                    },
-                    "deploy": {
-                        "type": "object",
-                        "description": "Project deployment configuration",
-                        "properties": {
-                            "targets": {
-                                "type": "array",
-                                "description": "Supported deployment targets",
-                                "items": {
-                                    "type": "string",
-                                    "enum": [
-                                        "helm",
-                                        "cloudrun",
-                                        "firebase",
-                                        "vercel",
-                                        "cloudflare-pages"
-                                    ]
-                                }
-                            },
-                            "configPath": {
-                                "type": "string",
-                                "description": "Path to deployment configs relative to project root",
-                                "default": "deploy"
-                            },
-                            "helm": {
+                            "architect": {
                                 "type": "object",
-                                "description": "Helm deployment defaults",
+                                "description": "Build and deployment targets",
                                 "properties": {
-                                    "port": {
-                                        "type": "integer",
-                                        "description": "Default service port"
-                                    },
-                                    "healthPath": {
-                                        "type": "string",
-                                        "description": "Health check endpoint path",
-                                        "default": "/health"
-                                    }
-                                }
-                            },
-                            "cloudrun": {
-                                "type": "object",
-                                "description": "Cloud Run deployment defaults",
-                                "properties": {
-                                    "port": {
-                                        "type": "integer",
-                                        "description": "Container port"
-                                    },
-                                    "cpu": {
-                                        "type": "string",
-                                        "description": "CPU allocation"
-                                    },
-                                    "memory": {
-                                        "type": "string",
-                                        "description": "Memory allocation"
-                                    },
-                                    "concurrency": {
-                                        "type": "integer",
-                                        "description": "Max concurrent requests"
-                                    },
-                                    "minInstances": {
-                                        "type": "integer",
-                                        "description": "Minimum instances"
-                                    },
-                                    "maxInstances": {
-                                        "type": "integer",
-                                        "description": "Maximum instances"
-                                    },
-                                    "timeout": {
-                                        "type": "string",
-                                        "description": "Request timeout"
-                                    },
-                                    "healthPath": {
-                                        "type": "string",
-                                        "description": "Health check endpoint",
-                                        "default": "/health"
-                                    }
-                                }
-                            },
-                            "firebase": {
-                                "type": "object",
-                                "description": "Firebase deployment configuration",
-                                "properties": {
-                                    "project": {
-                                        "type": "string",
-                                        "description": "Firebase project ID"
-                                    },
-                                    "site": {
-                                        "type": "string",
-                                        "description": "Firebase hosting site name"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "local": {
-                        "type": "object",
-                        "description": "Local development configuration overrides",
-                        "properties": {
-                            "cloudrun": {
-                                "type": "object",
-                                "description": "Local Cloud Run configuration",
-                                "properties": {
-                                    "port": {
-                                        "type": "integer",
-                                        "description": "Local port mapping"
-                                    },
-                                    "env": {
+                                    "build": {
                                         "type": "object",
-                                        "description": "Local environment variables",
-                                        "additionalProperties": {
-                                            "type": "string"
+                                        "description": "Build configuration",
+                                        "required": [
+                                            "builder"
+                                        ],
+                                        "properties": {
+                                            "builder": {
+                                                "type": "string",
+                                                "description": "Builder to use",
+                                                "enum": [
+                                                    "@forge/go:build",
+                                                    "@forge/angular:build",
+                                                    "@forge/nestjs:build"
+                                                ]
+                                            },
+                                            "options": {
+                                                "type": "object",
+                                                "description": "Builder-specific options"
+                                            },
+                                            "configurations": {
+                                                "type": "object",
+                                                "description": "Named build configurations",
+                                                "properties": {
+                                                    "production": {
+                                                        "type": "object",
+                                                        "description": "Production configuration"
+                                                    },
+                                                    "development": {
+                                                        "type": "object",
+                                                        "description": "Development configuration"
+                                                    },
+                                                    "local": {
+                                                        "type": "object",
+                                                        "description": "Local configuration"
+                                                    }
+                                                },
+                                                "additionalProperties": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "defaultConfiguration": {
+                                                "type": "string",
+                                                "description": "Default configuration to use"
+                                            }
+                                        }
+                                    },
+                                    "serve": {
+                                        "type": "object",
+                                        "description": "Development server configuration",
+                                        "properties": {
+                                            "builder": {
+                                                "type": "string",
+                                                "description": "Server builder to use"
+                                            },
+                                            "options": {
+                                                "type": "object",
+                                                "description": "Server options"
+                                            },
+                                            "configurations": {
+                                                "type": "object",
+                                                "description": "Named server configurations",
+                                                "additionalProperties": {
+                                                    "type": "object"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "deploy": {
+                                        "type": "object",
+                                        "description": "Deployment configuration",
+                                        "required": [
+                                            "deployer"
+                                        ],
+                                        "properties": {
+                                            "deployer": {
+                                                "type": "string",
+                                                "description": "Deployment target",
+                                                "enum": [
+                                                    "helm",
+                                                    "cloudrun",
+                                                    "firebase",
+                                                    "vercel",
+                                                    "cloudflare-pages"
+                                                ]
+                                            },
+                                            "options": {
+                                                "type": "object",
+                                                "description": "Deployment options"
+                                            },
+                                            "configurations": {
+                                                "type": "object",
+                                                "description": "Named deployment configurations",
+                                                "additionalProperties": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "defaultConfiguration": {
+                                                "type": "string",
+                                                "description": "Default deployment configuration"
+                                            }
+                                        }
+                                    },
+                                    "test": {
+                                        "type": "object",
+                                        "description": "Test configuration",
+                                        "properties": {
+                                            "builder": {
+                                                "type": "string",
+                                                "description": "Test builder to use"
+                                            },
+                                            "options": {
+                                                "type": "object",
+                                                "description": "Test options"
+                                            }
                                         }
                                     }
                                 }
                             },
-                            "gke": {
+                            "metadata": {
                                 "type": "object",
-                                "description": "Local Kubernetes configuration",
-                                "properties": {
-                                    "port": {
-                                        "type": "integer",
-                                        "description": "Local port mapping"
-                                    },
-                                    "env": {
-                                        "type": "object",
-                                        "description": "Local environment variables",
-                                        "additionalProperties": {
-                                            "type": "string"
+                                "description": "Additional project metadata",
+                                "additionalProperties": true
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "properties": {
+                                "language": {
+                                    "const": "go"
+                                }
+                            }
+                        },
+                        "then": {
+                            "properties": {
+                                "architect": {
+                                    "properties": {
+                                        "build": {
+                                            "properties": {
+                                                "options": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "goVersion": {
+                                                            "type": "string",
+                                                            "description": "Go version (e.g., 1.23.4)"
+                                                        },
+                                                        "registry": {
+                                                            "type": "string",
+                                                            "description": "Docker registry URL"
+                                                        },
+                                                        "dockerfile": {
+                                                            "type": "string",
+                                                            "description": "Path to Dockerfile",
+                                                            "default": "Dockerfile"
+                                                        },
+                                                        "ldflags": {
+                                                            "type": "string",
+                                                            "description": "Go linker flags"
+                                                        },
+                                                        "race": {
+                                                            "type": "boolean",
+                                                            "description": "Enable race detector"
+                                                        },
+                                                        "tags": {
+                                                            "type": "array",
+                                                            "description": "Build tags",
+                                                            "items": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "deploy": {
+                                            "properties": {
+                                                "options": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "configPath": {
+                                                            "type": "string",
+                                                            "description": "Path to deployment config",
+                                                            "default": "deploy/helm"
+                                                        },
+                                                        "namespace": {
+                                                            "type": "string",
+                                                            "description": "Kubernetes namespace"
+                                                        },
+                                                        "port": {
+                                                            "type": "integer",
+                                                            "description": "Service port"
+                                                        },
+                                                        "healthPath": {
+                                                            "type": "string",
+                                                            "description": "Health check endpoint",
+                                                            "default": "/health"
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            },
-                            "firebase": {
-                                "type": "object",
-                                "description": "Local Firebase configuration",
-                                "properties": {
-                                    "port": {
-                                        "type": "integer",
-                                        "description": "Firebase emulator port"
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "properties": {
+                                "language": {
+                                    "const": "angular"
+                                }
+                            }
+                        },
+                        "then": {
+                            "properties": {
+                                "architect": {
+                                    "properties": {
+                                        "build": {
+                                            "properties": {
+                                                "options": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "outputPath": {
+                                                            "type": "string",
+                                                            "description": "Build output directory"
+                                                        },
+                                                        "environmentMapper": {
+                                                            "type": "object",
+                                                            "description": "Map forge environments to Angular configurations",
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "optimization": {
+                                                            "type": "boolean",
+                                                            "description": "Enable build optimization"
+                                                        },
+                                                        "sourceMap": {
+                                                            "type": "boolean",
+                                                            "description": "Generate source maps"
+                                                        },
+                                                        "budgets": {
+                                                            "type": "array",
+                                                            "description": "Size budgets",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "type": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "maximumWarning": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "maximumError": {
+                                                                        "type": "string"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "serve": {
+                                            "properties": {
+                                                "options": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "port": {
+                                                            "type": "integer",
+                                                            "description": "Development server port"
+                                                        },
+                                                        "host": {
+                                                            "type": "string",
+                                                            "description": "Development server host"
+                                                        },
+                                                        "ssl": {
+                                                            "type": "boolean",
+                                                            "description": "Enable HTTPS"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "deploy": {
+                                            "properties": {
+                                                "options": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "project": {
+                                                            "type": "string",
+                                                            "description": "Firebase project ID"
+                                                        },
+                                                        "site": {
+                                                            "type": "string",
+                                                            "description": "Firebase hosting site"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "properties": {
+                                "language": {
+                                    "const": "nestjs"
+                                }
+                            }
+                        },
+                        "then": {
+                            "properties": {
+                                "architect": {
+                                    "properties": {
+                                        "build": {
+                                            "properties": {
+                                                "options": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "nodeVersion": {
+                                                            "type": "string",
+                                                            "description": "Node.js version"
+                                                        },
+                                                        "registry": {
+                                                            "type": "string",
+                                                            "description": "Docker registry URL"
+                                                        },
+                                                        "dockerfile": {
+                                                            "type": "string",
+                                                            "description": "Path to Dockerfile",
+                                                            "default": "Dockerfile"
+                                                        },
+                                                        "tsconfig": {
+                                                            "type": "string",
+                                                            "description": "TypeScript config path"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "serve": {
+                                            "properties": {
+                                                "options": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "port": {
+                                                            "type": "integer",
+                                                            "description": "Development server port"
+                                                        },
+                                                        "watch": {
+                                                            "type": "boolean",
+                                                            "description": "Enable watch mode"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
+                ]
             }
         },
-        "environments": {
+        "cli": {
             "type": "object",
-            "description": "Deployment environments with default configurations",
-            "additionalProperties": {
-                "type": "object",
-                "required": [
-                    "name"
-                ],
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Environment name"
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Environment description"
-                    },
-                    "target": {
-                        "type": "string",
-                        "description": "Default deployment target for this environment",
-                        "enum": [
-                            "gke",
-                            "cloudrun",
-                            "kind"
-                        ]
-                    },
-                    "cluster": {
-                        "type": "string",
-                        "description": "Kubernetes/GKE cluster name"
-                    },
-                    "namespace": {
-                        "type": "string",
-                        "description": "Kubernetes namespace"
-                    },
-                    "registry": {
-                        "type": "string",
-                        "description": "Docker registry for this environment"
-                    },
-                    "region": {
-                        "type": "string",
-                        "description": "Cloud region"
-                    }
-                }
-            }
-        },
-        "infrastructure": {
-            "type": "object",
-            "description": "Infrastructure configuration by provider",
+            "description": "CLI configuration and defaults",
             "properties": {
-                "gke": {
-                    "type": "object",
-                    "description": "Google Kubernetes Engine configuration",
-                    "properties": {
-                        "projectId": {
-                            "type": "string",
-                            "description": "GCP project ID"
-                        },
-                        "clusterName": {
-                            "type": "string",
-                            "description": "GKE cluster name"
-                        },
-                        "region": {
-                            "type": "string",
-                            "description": "GKE cluster region"
-                        },
-                        "namespace": {
-                            "type": "string",
-                            "description": "Default namespace"
-                        },
-                        "workloadIdentityProvider": {
-                            "type": "string",
-                            "description": "Workload Identity provider"
-                        },
-                        "serviceAccount": {
-                            "type": "string",
-                            "description": "Service account email"
-                        }
-                    }
-                },
-                "kubernetes": {
-                    "type": "object",
-                    "description": "Generic Kubernetes configuration",
-                    "properties": {
-                        "cluster": {
-                            "type": "string",
-                            "description": "Cluster name"
-                        },
-                        "namespace": {
-                            "type": "string",
-                            "description": "Default namespace"
-                        }
-                    }
-                },
-                "cloudrun": {
-                    "type": "object",
-                    "description": "Google Cloud Run configuration",
-                    "properties": {
-                        "projectId": {
-                            "type": "string",
-                            "description": "GCP project ID"
-                        },
-                        "region": {
-                            "type": "string",
-                            "description": "Cloud Run region"
-                        }
-                    }
-                },
-                "firebase": {
-                    "type": "object",
-                    "description": "Firebase configuration",
-                    "properties": {
-                        "projects": {
-                            "type": "object",
-                            "description": "Firebase projects per environment",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                },
-                "kind": {
-                    "type": "object",
-                    "description": "Kind (local Kubernetes) configuration",
-                    "properties": {
-                        "configPath": {
-                            "type": "string",
-                            "description": "Path to kind config file"
-                        }
-                    }
+                "defaultBuildEnvironment": {
+                    "type": "string",
+                    "description": "Default build environment",
+                    "default": "local"
                 }
             }
         }

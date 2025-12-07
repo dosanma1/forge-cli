@@ -235,38 +235,62 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		}
 	}
 
-	// Add project to workspace config
+	// Add project to workspace config with new architect pattern
 	project := &workspace.Project{
-		Name: serviceName,
-		Type: workspace.ProjectTypeGo,
-		Root: filepath.Join(servicesPath, serviceName),
-		Tags: []string{"backend", "service"},
-		Build: &workspace.ProjectBuildConfig{
-			GoVersion:  config.Workspace.ToolVersions.Go,
-			Registry:   dockerRegistry,
-			Dockerfile: "Dockerfile",
-		},
-		Deploy: &workspace.ProjectDeployConfig{
-			Targets:    []string{"helm", "cloudrun"},
-			ConfigPath: "deploy",
-		},
-		Local: &workspace.ProjectLocalConfig{
-			CloudRun: &workspace.ProjectLocalCloudRun{
-				Port: 8080,
-				Env: map[string]string{
-					"LOG_LEVEL": "debug",
+		ProjectType: "service",
+		Language:    "go",
+		Root:        filepath.Join(servicesPath, serviceName),
+		Tags:        []string{"backend", "service"},
+		Architect: &workspace.Architect{
+			Build: &workspace.ArchitectTarget{
+				Builder: "@forge/go:build",
+				Options: map[string]interface{}{
+					"goVersion":  config.Workspace.ToolVersions.Go,
+					"registry":   dockerRegistry,
+					"dockerfile": "Dockerfile",
 				},
+				Configurations: map[string]interface{}{
+					"production": map[string]interface{}{
+						"optimization": true,
+						"registry":     dockerRegistry,
+					},
+					"development": map[string]interface{}{},
+					"local": map[string]interface{}{
+						"race": true,
+					},
+				},
+				DefaultConfiguration: "production",
 			},
-			GKE: &workspace.ProjectLocalGKE{
-				Port: 8080,
-				Env: map[string]string{
-					"LOG_LEVEL": "debug",
+			Deploy: &workspace.ArchitectTarget{
+				Deployer: "helm",
+				Options: map[string]interface{}{
+					"configPath": "deploy/helm",
+					"namespace":  "default",
+					"port":       8080,
+					"healthPath": "/health",
 				},
+				Configurations: map[string]interface{}{
+					"production": map[string]interface{}{
+						"namespace": "prod",
+					},
+					"development": map[string]interface{}{
+						"namespace": "dev",
+					},
+					"local": map[string]interface{}{
+						"namespace": "default",
+					},
+				},
+				DefaultConfiguration: "production",
+			},
+		},
+		Metadata: map[string]interface{}{
+			"deployment": map[string]interface{}{
+				"target": "helm",
 			},
 		},
 	}
 
-	if err := config.AddProject(project); err != nil {
+	if err := config.AddProject(serviceName, project); err != nil {
 		return fmt.Errorf("failed to add project to config: %w", err)
 	}
 
@@ -318,10 +342,10 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 func (g *ServiceGenerator) updateRootSkaffold(workspaceDir string, config *workspace.Config) error {
 	// Collect all services
 	var services []map[string]interface{}
-	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeGo {
+	for name, project := range config.Projects {
+		if project.Language == "go" {
 			services = append(services, map[string]interface{}{
-				"Name": project.Name,
+				"Name": name,
 			})
 		}
 	}
@@ -355,10 +379,10 @@ func (g *ServiceGenerator) updateRootSkaffold(workspaceDir string, config *works
 func (g *ServiceGenerator) updateModuleBazel(workspaceDir string, config *workspace.Config) error {
 	// Collect all services
 	var services []map[string]interface{}
-	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeGo {
+	for name, project := range config.Projects {
+		if project.Language == "go" {
 			services = append(services, map[string]interface{}{
-				"Name": project.Name,
+				"Name": name,
 			})
 		}
 	}
@@ -366,7 +390,7 @@ func (g *ServiceGenerator) updateModuleBazel(workspaceDir string, config *worksp
 	// Check if frontend exists
 	hasFrontend := false
 	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeAngular {
+		if project.Language == "angular" {
 			hasFrontend = true
 			break
 		}
@@ -398,10 +422,10 @@ func (g *ServiceGenerator) updateModuleBazel(workspaceDir string, config *worksp
 func (g *ServiceGenerator) updateGoWork(workspaceDir string, config *workspace.Config) error {
 	// Collect all services
 	var services []map[string]interface{}
-	for _, project := range config.Projects {
-		if project.Type == workspace.ProjectTypeGo {
+	for name, project := range config.Projects {
+		if project.Language == "go" {
 			services = append(services, map[string]interface{}{
-				"Name": project.Name,
+				"Name": name,
 			})
 		}
 	}
