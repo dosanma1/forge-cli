@@ -159,26 +159,22 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("failed to update app styles.css: %w", err)
 	}
 
-	// Prompt for deployment target
-	fmt.Printf("\n🚀 Select deployment target for %s:\n", appName)
-	fmt.Println("  1) Firebase (Static hosting)")
-	fmt.Println("  2) GKE (Kubernetes with Helm)")
-	fmt.Println("  3) Cloud Run (Containerized)")
-	fmt.Print("Enter choice (1-3): ")
-
-	var choice int
-	if _, err := fmt.Scanln(&choice); err != nil {
-		choice = 1 // Default to Firebase
-	}
-
+	// Get deployment target from opts.Data or default to firebase
 	deploymentTarget := "firebase"
-	switch choice {
-	case 2:
-		deploymentTarget = "gke"
-	case 3:
-		deploymentTarget = "cloudrun"
-	default:
-		deploymentTarget = "firebase"
+	if opts.Data != nil {
+		if deployment, ok := opts.Data["deployment"].(string); ok && deployment != "" {
+			// Convert from display names to internal names
+			switch deployment {
+			case "Firebase":
+				deploymentTarget = "firebase"
+			case "CloudRun":
+				deploymentTarget = "cloudrun"
+			case "GKE":
+				deploymentTarget = "gke"
+			default:
+				deploymentTarget = strings.ToLower(deployment)
+			}
+		}
 	}
 
 	// Generate environment files

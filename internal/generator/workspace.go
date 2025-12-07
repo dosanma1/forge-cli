@@ -413,8 +413,9 @@ Thumbs.db
 					frontend := frontendData.(map[string]interface{})
 					frontendName := frontend["Name"].(string)
 					frontendType := frontend["Type"].(string)
+					deployment := frontend["Deployment"].(string)
 
-					fmt.Printf("\n🎨 Generating %s application: %s\n", frontendType, frontendName)
+					fmt.Printf("\n🎨 Generating %s application: %s (→ %s)\n", frontendType, frontendName, deployment)
 
 					hasFrontend = true
 
@@ -422,7 +423,10 @@ Thumbs.db
 					frontendOpts := GeneratorOptions{
 						OutputDir: workspaceDir,
 						Name:      frontendName,
-						DryRun:    false,
+						Data: map[string]interface{}{
+							"deployment": deployment,
+						},
+						DryRun: false,
 					}
 
 					if err := frontendGen.Generate(ctx, frontendOpts); err != nil {
