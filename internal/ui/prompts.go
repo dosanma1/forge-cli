@@ -10,7 +10,7 @@ import (
 func AskText(prompt, placeholder string) (string, error) {
 	m := NewTextInput(prompt, placeholder)
 	p := tea.NewProgram(m)
-	
+
 	finalModel, err := p.Run()
 	if err != nil {
 		return "", err
@@ -28,7 +28,7 @@ func AskText(prompt, placeholder string) (string, error) {
 func AskConfirm(prompt string, defaultYes bool) (bool, error) {
 	m := NewConfirm(prompt, defaultYes)
 	p := tea.NewProgram(m)
-	
+
 	finalModel, err := p.Run()
 	if err != nil {
 		return false, err
@@ -46,7 +46,7 @@ func AskConfirm(prompt string, defaultYes bool) (bool, error) {
 func AskSelect(prompt string, choices []string) (int, string, error) {
 	m := NewSelect(prompt, choices)
 	p := tea.NewProgram(m)
-	
+
 	finalModel, err := p.Run()
 	if err != nil {
 		return -1, "", err
@@ -64,7 +64,7 @@ func AskSelect(prompt string, choices []string) (int, string, error) {
 func AskMultiSelect(prompt string, choices []string, defaultSelected []int) ([]int, []string, error) {
 	m := NewMultiSelect(prompt, choices, defaultSelected)
 	p := tea.NewProgram(m)
-	
+
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, nil, err

@@ -68,7 +68,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 	// Initialize workspace paths
 	config.Workspace.Paths = &workspace.WorkspacePaths{
 		Services:       "backend/services",
-		FrontendApps:   "frontend/projects",
+		FrontendApps:   fmt.Sprintf("frontend/apps/%s/projects", workspaceName),
 		Infrastructure: "infra",
 		Shared:         "shared",
 		Docs:           "docs",

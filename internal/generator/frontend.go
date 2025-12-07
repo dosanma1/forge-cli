@@ -61,7 +61,9 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
 
+	workspaceName := config.Workspace.Name
 	frontendDir := filepath.Join(opts.OutputDir, "frontend")
+	frontendAppDir := filepath.Join(frontendDir, "apps", workspaceName)
 
 	if opts.DryRun {
 		fmt.Printf("Would create Angular application: %s\n", appName)
@@ -125,11 +127,17 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		}
 	}
 
+	// Create apps/<workspace> directory if it doesn't exist
+	if err := os.MkdirAll(frontendAppDir, 0755); err != nil {
+		return fmt.Errorf("failed to create frontend app directory: %w", err)
+	}
+
 	// Generate application using ng generate application
 	fmt.Printf("📦 Generating Angular application: %s\n", appName)
 
 	if err := g.runAngularCLI(frontendDir, config, []string{
 		"generate", "application", appName,
+		"--project-root=apps/" + workspaceName + "/projects/" + appName,
 		"--routing=true",
 		"--style=css",
 		"--skip-tests=false",
@@ -139,7 +147,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 	}
 
 	// Update app's styles.css with Tailwind import
-	appDir := filepath.Join(frontendDir, "projects", appName)
+	appDir := filepath.Join(frontendAppDir, "projects", appName)
 	appStylesPath := filepath.Join(appDir, "src", "styles.css")
 
 	stylesContent, err := g.engine.RenderTemplate("frontend/styles.css.tmpl", map[string]interface{}{})
@@ -199,7 +207,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 	project := &workspace.Project{
 		Name: appName,
 		Type: workspace.ProjectTypeAngular,
-		Root: fmt.Sprintf("frontend/projects/%s", appName),
+		Root: fmt.Sprintf("frontend/apps/%s/projects/%s", workspaceName, appName),
 		Tags: []string{"frontend", "angular", deploymentTarget},
 		Build: &workspace.ProjectBuildConfig{
 			EnvironmentMapper: map[string]string{

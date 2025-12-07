@@ -96,20 +96,20 @@ type ParallelConfig struct {
 
 // WorkspaceMetadata contains workspace-level metadata.
 type WorkspaceMetadata struct {
-	Name         string                 `json:"name"`
-	ForgeVersion string                 `json:"forgeVersion"`
-	ToolVersions *ToolVersions          `json:"toolVersions,omitempty"`
-	Paths        *WorkspacePaths        `json:"paths,omitempty"`
-	Defaults     *WorkspaceDefaults     `json:"defaults,omitempty"`
-	GitHub       *GitHubConfig          `json:"github,omitempty"`
-	Docker       *DockerConfig          `json:"docker,omitempty"`
-	GCP          *GCPConfig             `json:"gcp,omitempty"`
-	Kubernetes   *KubernetesConfig      `json:"kubernetes,omitempty"`
+	Name         string             `json:"name"`
+	ForgeVersion string             `json:"forgeVersion"`
+	ToolVersions *ToolVersions      `json:"toolVersions,omitempty"`
+	Paths        *WorkspacePaths    `json:"paths,omitempty"`
+	Defaults     *WorkspaceDefaults `json:"defaults,omitempty"`
+	GitHub       *GitHubConfig      `json:"github,omitempty"`
+	Docker       *DockerConfig      `json:"docker,omitempty"`
+	GCP          *GCPConfig         `json:"gcp,omitempty"`
+	Kubernetes   *KubernetesConfig  `json:"kubernetes,omitempty"`
 }
 
 // WorkspaceDefaults contains workspace-level defaults for projects
 type WorkspaceDefaults struct {
-	BuildEnvironment         string            `json:"buildEnvironment,omitempty"`          // Default: "local"
+	BuildEnvironment         string            `json:"buildEnvironment,omitempty"`         // Default: "local"
 	AngularEnvironmentMapper map[string]string `json:"angularEnvironmentMapper,omitempty"` // Maps forge env to Angular config
 }
 
