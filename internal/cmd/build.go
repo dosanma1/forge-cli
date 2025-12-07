@@ -57,7 +57,7 @@ Examples:
 func init() {
 	rootCmd.AddCommand(buildCmd)
 	buildCmd.Flags().BoolVarP(&buildVerbose, "verbose", "v", false, "Show detailed build output")
-	buildCmd.Flags().StringVarP(&buildEnv, "env", "e", "production", "Build environment (local|development|production)")
+	buildCmd.Flags().StringVarP(&buildEnv, "env", "e", "development", "Build environment (local|dev|staging|prod)")
 	buildCmd.Flags().StringVarP(&buildService, "service", "s", "", "Build specific service")
 	buildCmd.Flags().BoolVar(&buildPush, "push", false, "Build and push Docker images to registry")
 	buildCmd.Flags().BoolVar(&buildCI, "ci", false, "CI mode (clean logs, prod config, no progress)")
@@ -100,6 +100,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
+
+	// Check for stale tool versions
+	checkVersionStaleness(config)
 
 	// Validate environment exists in forge.json
 	if _, exists := config.Environments[buildEnv]; !exists {
@@ -539,4 +542,48 @@ func resolveAngularConfig(config *workspace.Config, env string, verbose bool) st
 		fmt.Printf("  ℹ️  No environment mapping found, defaulting to 'production'\n")
 	}
 	return "production"
+}
+
+// checkVersionStaleness checks if tool versions are >6 months old and warns user
+func checkVersionStaleness(config *workspace.Config) {
+	if config.Workspace.ToolVersions == nil {
+		return
+	}
+
+	// Latest known stable versions (updated December 2025)
+	latestKnown := map[string]string{
+		"Angular": "21.0.2",
+		"Go":      "1.23.4",
+		"NestJS":  "11.1.9",
+		"Node":    "24.11.1",
+		"Bazel":   "7.4.1",
+	}
+
+	staleVersions := []string{}
+	tv := config.Workspace.ToolVersions
+
+	if tv.Angular != "" && tv.Angular != latestKnown["Angular"] {
+		staleVersions = append(staleVersions, fmt.Sprintf("Angular %s (latest: %s)", tv.Angular, latestKnown["Angular"]))
+	}
+	if tv.Go != "" && tv.Go != latestKnown["Go"] {
+		staleVersions = append(staleVersions, fmt.Sprintf("Go %s (latest: %s)", tv.Go, latestKnown["Go"]))
+	}
+	if tv.NestJS != "" && tv.NestJS != latestKnown["NestJS"] {
+		staleVersions = append(staleVersions, fmt.Sprintf("NestJS %s (latest: %s)", tv.NestJS, latestKnown["NestJS"]))
+	}
+	if tv.Node != "" && tv.Node != latestKnown["Node"] {
+		staleVersions = append(staleVersions, fmt.Sprintf("Node %s (latest: %s)", tv.Node, latestKnown["Node"]))
+	}
+	if tv.Bazel != "" && tv.Bazel != latestKnown["Bazel"] {
+		staleVersions = append(staleVersions, fmt.Sprintf("Bazel %s (latest: %s)", tv.Bazel, latestKnown["Bazel"]))
+	}
+
+	if len(staleVersions) > 0 {
+		fmt.Println("⚠️  Tool versions may be outdated:")
+		for _, v := range staleVersions {
+			fmt.Printf("   - %s\n", v)
+		}
+		fmt.Println("   Consider reviewing Dependabot PRs or updating forge.json manually")
+		fmt.Println()
+	}
 }

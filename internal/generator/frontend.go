@@ -81,7 +81,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 
 		// Use ng new to create the workspace with proper Angular CLI setup
 		// Flags match monorepo-starter configuration
-		if err := g.runAngularCLI(opts.OutputDir, []string{
+		if err := g.runAngularCLI(opts.OutputDir, config, []string{
 			"new", "frontend",
 			"--directory=frontend",
 			"--create-application=false", // Don't create default app
@@ -128,7 +128,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 	// Generate application using ng generate application
 	fmt.Printf("📦 Generating Angular application: %s\n", appName)
 
-	if err := g.runAngularCLI(frontendDir, []string{
+	if err := g.runAngularCLI(frontendDir, config, []string{
 		"generate", "application", appName,
 		"--routing=true",
 		"--style=css",
@@ -233,8 +233,12 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 }
 
 // runAngularCLI executes Angular CLI commands
-func (g *FrontendGenerator) runAngularCLI(workDir string, args []string) error {
-	return g.runCommand(workDir, "npx", append([]string{"@angular/cli@latest"}, args...)...)
+func (g *FrontendGenerator) runAngularCLI(workDir string, config *workspace.Config, args []string) error {
+	angularVersion := "21.0.2" // default
+	if config.Workspace.ToolVersions != nil && config.Workspace.ToolVersions.Angular != "" {
+		angularVersion = config.Workspace.ToolVersions.Angular
+	}
+	return g.runCommand(workDir, "npx", append([]string{fmt.Sprintf("@angular/cli@%s", angularVersion)}, args...)...)
 }
 
 // runNpmCommand executes npm commands

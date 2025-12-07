@@ -12,6 +12,7 @@ const ConfigFileName = "forge.json"
 
 // Config represents the workspace configuration.
 type Config struct {
+	Schema         string                       `json:"$schema,omitempty"`
 	Version        string                       `json:"version"`
 	Workspace      WorkspaceMetadata            `json:"workspace"`
 	Projects       map[string]Project           `json:"projects"`
@@ -95,13 +96,30 @@ type ParallelConfig struct {
 
 // WorkspaceMetadata contains workspace-level metadata.
 type WorkspaceMetadata struct {
-	Name         string            `json:"name"`
-	ForgeVersion string            `json:"forgeVersion"`
-	Paths        *WorkspacePaths   `json:"paths,omitempty"`
-	GitHub       *GitHubConfig     `json:"github,omitempty"`
-	Docker       *DockerConfig     `json:"docker,omitempty"`
-	GCP          *GCPConfig        `json:"gcp,omitempty"`
-	Kubernetes   *KubernetesConfig `json:"kubernetes,omitempty"`
+	Name         string                 `json:"name"`
+	ForgeVersion string                 `json:"forgeVersion"`
+	ToolVersions *ToolVersions          `json:"toolVersions,omitempty"`
+	Paths        *WorkspacePaths        `json:"paths,omitempty"`
+	Defaults     *WorkspaceDefaults     `json:"defaults,omitempty"`
+	GitHub       *GitHubConfig          `json:"github,omitempty"`
+	Docker       *DockerConfig          `json:"docker,omitempty"`
+	GCP          *GCPConfig             `json:"gcp,omitempty"`
+	Kubernetes   *KubernetesConfig      `json:"kubernetes,omitempty"`
+}
+
+// WorkspaceDefaults contains workspace-level defaults for projects
+type WorkspaceDefaults struct {
+	BuildEnvironment         string            `json:"buildEnvironment,omitempty"`          // Default: "local"
+	AngularEnvironmentMapper map[string]string `json:"angularEnvironmentMapper,omitempty"` // Maps forge env to Angular config
+}
+
+// ToolVersions contains locked versions of framework tools.
+type ToolVersions struct {
+	Angular string `json:"angular,omitempty"` // Angular CLI and framework version
+	Go      string `json:"go,omitempty"`      // Go SDK version
+	NestJS  string `json:"nestjs,omitempty"`  // NestJS CLI and core version
+	Node    string `json:"node,omitempty"`    // Node.js version
+	Bazel   string `json:"bazel,omitempty"`   // Bazel build tool version
 }
 
 // WorkspacePaths contains workspace directory structure configuration.

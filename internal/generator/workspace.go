@@ -63,6 +63,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 
 	// Create workspace configuration
 	config := workspace.NewConfig(workspaceName)
+	config.Schema = "./schemas/forge-config.v1.schema.json"
 
 	// Initialize workspace paths
 	config.Workspace.Paths = &workspace.WorkspacePaths{
@@ -71,6 +72,23 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 		Infrastructure: "infra",
 		Shared:         "shared",
 		Docs:           "docs",
+	}
+	config.Workspace.ToolVersions = &workspace.ToolVersions{
+		Angular: "21.0.2",
+		Go:      "1.23.4",
+		NestJS:  "11.1.9",
+		Node:    "24.11.1",
+		Bazel:   "7.4.1",
+	}
+	config.Workspace.Defaults = &workspace.WorkspaceDefaults{
+		BuildEnvironment: "local",
+		AngularEnvironmentMapper: map[string]string{
+			"local":      "development",
+			"dev":        "development",
+			"staging":    "staging",
+			"prod":       "production",
+			"production": "production",
+		},
 	}
 
 	// Extract optional metadata from Data
@@ -284,6 +302,9 @@ node_modules/
 dist/
 .angular/
 
+# Forge
+.forge/
+
 # IDEs
 .vscode/
 .idea/
@@ -304,6 +325,11 @@ Thumbs.db
 	gitignorePath := filepath.Join(workspaceDir, ".gitignore")
 	if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644); err != nil {
 		return fmt.Errorf("failed to create .gitignore: %w", err)
+	}
+
+	// Create .github/dependabot.yml
+	if err := g.createDependabotConfig(workspaceDir); err != nil {
+		return fmt.Errorf("failed to create dependabot config: %w", err)
 	}
 
 	// Create root skaffold.yaml
@@ -338,34 +364,43 @@ Thumbs.db
 		return fmt.Errorf("failed to generate infrastructure: %w", err)
 	}
 
-	// Generate backend service if requested
+	// Generate backend services if requested
 	if opts.Data != nil {
-		if createBackend, ok := opts.Data["create_backend"].(bool); ok && createBackend {
-			backendServiceName := "api-server" // default
-			if serviceName, ok := opts.Data["backend_service_name"].(string); ok && serviceName != "" {
-				backendServiceName = serviceName
+		if servicesData, ok := opts.Data["services"].([]interface{}); ok {
+			for _, svcData := range servicesData {
+				svc := svcData.(map[string]interface{})
+				serviceName := svc["Name"].(string)
+				serviceType := svc["Type"].(string)
+
+				fmt.Printf("\n🚀 Generating %s service: %s\n", serviceType, serviceName)
+
+				var serviceGen Generator
+				if serviceType == "NestJS" {
+					serviceGen = NewNestJSServiceGenerator()
+				} else {
+					serviceGen = NewServiceGenerator()
+				}
+
+				serviceOpts := GeneratorOptions{
+					OutputDir: workspaceDir,
+					Name:      serviceName,
+					DryRun:    false,
+				}
+
+				if err := serviceGen.Generate(ctx, serviceOpts); err != nil {
+					return fmt.Errorf("failed to generate %s service: %w", serviceType, err)
+				}
+
+				if serviceType == "Go" {
+					createdServices = append(createdServices, serviceName)
+				}
 			}
-
-			fmt.Printf("\n🚀 Generating backend service: %s\n", backendServiceName)
-
-			serviceGen := NewServiceGenerator()
-			serviceOpts := GeneratorOptions{
-				OutputDir: workspaceDir,
-				Name:      backendServiceName,
-				DryRun:    false,
-			}
-
-			if err := serviceGen.Generate(ctx, serviceOpts); err != nil {
-				return fmt.Errorf("failed to generate backend service: %w", err)
-			}
-
-			createdServices = append(createdServices, backendServiceName)
 		}
 	}
 
-	// Generate frontend if requested
+	// Generate frontends if requested
 	if opts.Data != nil {
-		if createFrontend, ok := opts.Data["create_frontend"].(bool); ok && createFrontend {
+		if frontendsData, ok := opts.Data["frontends"].([]interface{}); ok {
 			// Check Node.js prerequisites before attempting frontend generation
 			if err := CheckNodeJS(); err != nil {
 				fmt.Printf("\n⚠️  Skipping frontend generation - Node.js not found\n")
@@ -374,24 +409,25 @@ Thumbs.db
 				fmt.Printf("\n⚠️  Skipping frontend generation - npm/npx not found\n")
 				fmt.Printf("   %s\n", err.Error())
 			} else {
-				frontendAppName := "web-app" // default
-				if appName, ok := opts.Data["frontend_app_name"].(string); ok && appName != "" {
-					frontendAppName = appName
-				}
+				for _, frontendData := range frontendsData {
+					frontend := frontendData.(map[string]interface{})
+					frontendName := frontend["Name"].(string)
+					frontendType := frontend["Type"].(string)
 
-				fmt.Printf("\n🎨 Generating Angular frontend application: %s\n", frontendAppName)
+					fmt.Printf("\n🎨 Generating %s application: %s\n", frontendType, frontendName)
 
-				hasFrontend = true
+					hasFrontend = true
 
-				frontendGen := NewFrontendGenerator()
-				frontendOpts := GeneratorOptions{
-					OutputDir: workspaceDir,
-					Name:      frontendAppName,
-					DryRun:    false,
-				}
+					frontendGen := NewFrontendGenerator()
+					frontendOpts := GeneratorOptions{
+						OutputDir: workspaceDir,
+						Name:      frontendName,
+						DryRun:    false,
+					}
 
-				if err := frontendGen.Generate(ctx, frontendOpts); err != nil {
-					return fmt.Errorf("failed to generate frontend: %w", err)
+					if err := frontendGen.Generate(ctx, frontendOpts); err != nil {
+						return fmt.Errorf("failed to generate frontend: %w", err)
+					}
 				}
 			}
 		}
@@ -399,7 +435,7 @@ Thumbs.db
 
 	// Update go.work to include generated services
 	if len(createdServices) > 0 {
-		if err := g.updateGoWork(workspaceDir, createdServices); err != nil {
+		if err := g.updateGoWork(workspaceDir, createdServices, config); err != nil {
 			return fmt.Errorf("failed to update go.work: %w", err)
 		}
 	}
@@ -414,26 +450,7 @@ Thumbs.db
 	fmt.Printf("\n✓ Workspace created successfully at: %s\n", workspaceDir)
 	fmt.Printf("✓ Run 'cd %s' to enter the workspace\n", workspaceName)
 	fmt.Printf("✓ Run 'forge setup' to install Bazel\n")
-
-	// Show relevant next steps based on what was created
-	if opts.Data != nil {
-		if createBackend, ok := opts.Data["create_backend"].(bool); ok && createBackend {
-			if serviceName, ok := opts.Data["backend_service_name"].(string); ok && serviceName != "" {
-				fmt.Printf("✓ Backend service '%s' created\n", serviceName)
-			}
-		}
-		if createFrontend, ok := opts.Data["create_frontend"].(bool); ok && createFrontend {
-			if appName, ok := opts.Data["frontend_app_name"].(string); ok && appName != "" {
-				fmt.Printf("✓ Frontend application '%s' created\n", appName)
-				fmt.Printf("✓ Run 'cd frontend && ng serve %s' to start your frontend\n", appName)
-			}
-		} else {
-			fmt.Printf("✓ Run 'forge generate frontend <name>' to create a frontend app\n")
-		}
-		if createBackend, ok := opts.Data["create_backend"].(bool); !ok || !createBackend {
-			fmt.Printf("✓ Run 'forge generate service <name>' to create a backend service\n")
-		}
-	}
+	fmt.Printf("✓ Run 'forge setup-hooks' to configure git hooks\n")
 
 	return nil
 }
@@ -459,13 +476,16 @@ func (g *WorkspaceGenerator) generateBazelFilesWithOrg(workspaceDir, workspaceNa
 	}
 
 	data := map[string]interface{}{
-		"ProjectName": workspaceName,
-		"Version":     "0.1.0",
-		"GoVersion":   "1.23",
-		"NodeVersion": "20.18.1",
-		"HasFrontend": hasFrontend,
-		"Services":    servicesData,
-		"GitHubOrg":   githubOrg,
+		"ProjectName":    workspaceName,
+		"Version":        "0.1.0",
+		"GoVersion":      "1.23.4",
+		"NodeVersion":    "24.11.1",
+		"AngularVersion": "21.0.2",
+		"NestJSVersion":  "11.1.9",
+		"BazelVersion":   "7.4.1",
+		"HasFrontend":    hasFrontend,
+		"Services":       servicesData,
+		"GitHubOrg":      githubOrg,
 	}
 
 	for filename, templatePath := range files {
@@ -735,7 +755,7 @@ func (g *WorkspaceGenerator) generateAPIGateway(workspaceDir, projectName string
 }
 
 // updateGoWork updates go.work to include generated services
-func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []string) error {
+func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []string, config *workspace.Config) error {
 	// Prepare service data for template
 	var services []map[string]interface{}
 	for _, name := range serviceNames {
@@ -745,7 +765,7 @@ func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []st
 	}
 
 	data := map[string]interface{}{
-		"GoVersion": "1.23",
+		"GoVersion": config.Workspace.ToolVersions.Go,
 		"Services":  services,
 	}
 
@@ -757,6 +777,26 @@ func (g *WorkspaceGenerator) updateGoWork(workspaceDir string, serviceNames []st
 	goWorkPath := filepath.Join(workspaceDir, "go.work")
 	if err := os.WriteFile(goWorkPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write go.work: %w", err)
+	}
+
+	return nil
+}
+
+// createDependabotConfig creates .github/dependabot.yml for automated dependency updates
+func (g *WorkspaceGenerator) createDependabotConfig(workspaceDir string) error {
+	content, err := g.engine.RenderTemplate("github/dependabot.yml.tmpl", map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to render dependabot.yml: %w", err)
+	}
+
+	githubDir := filepath.Join(workspaceDir, ".github")
+	if err := os.MkdirAll(githubDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .github directory: %w", err)
+	}
+
+	dependabotPath := filepath.Join(githubDir, "dependabot.yml")
+	if err := os.WriteFile(dependabotPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to create dependabot.yml: %w", err)
 	}
 
 	return nil

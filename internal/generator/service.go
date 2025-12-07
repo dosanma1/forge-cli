@@ -242,7 +242,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		Root: filepath.Join(servicesPath, serviceName),
 		Tags: []string{"backend", "service"},
 		Build: &workspace.ProjectBuildConfig{
-			GoVersion:  "1.23",
+			GoVersion:  config.Workspace.ToolVersions.Go,
 			Registry:   dockerRegistry,
 			Dockerfile: "Dockerfile",
 		},
@@ -375,7 +375,7 @@ func (g *ServiceGenerator) updateModuleBazel(workspaceDir string, config *worksp
 	data := map[string]interface{}{
 		"ProjectName": config.Workspace.Name,
 		"Version":     "0.1.0",
-		"GoVersion":   "1.23",
+		"GoVersion":   config.Workspace.ToolVersions.Go,
 		"NodeVersion": "20.18.1",
 		"HasFrontend": hasFrontend,
 		"Services":    services,
@@ -407,7 +407,7 @@ func (g *ServiceGenerator) updateGoWork(workspaceDir string, config *workspace.C
 	}
 
 	data := map[string]interface{}{
-		"GoVersion": "1.23",
+		"GoVersion": config.Workspace.ToolVersions.Go,
 		"Services":  services,
 	}
 

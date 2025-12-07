@@ -19,21 +19,31 @@ const (
 
 // Manager handles template fetching and caching.
 type Manager struct {
-	cacheDir string
+	cacheDir      string
+	workspaceRoot string
 }
 
 // NewManager creates a new template manager.
-func NewManager() (*Manager, error) {
-	// Get cache directory: ~/.forge/cache/templates
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+// If workspaceRoot is provided, cache is stored in <workspace>/.forge/cache/templates
+// Otherwise falls back to ~/.forge/cache/templates for compatibility
+func NewManager(workspaceRoot string) (*Manager, error) {
+	var cacheDir string
+
+	if workspaceRoot != "" {
+		// Project-local cache (like Angular's .angular/cache)
+		cacheDir = filepath.Join(workspaceRoot, ".forge", "cache", "templates")
+	} else {
+		// Global cache fallback
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get home directory: %w", err)
+		}
+		cacheDir = filepath.Join(homeDir, ".forge", "cache", "templates")
 	}
 
-	cacheDir := filepath.Join(homeDir, ".forge", "cache", "templates")
-
 	return &Manager{
-		cacheDir: cacheDir,
+		cacheDir:      cacheDir,
+		workspaceRoot: workspaceRoot,
 	}, nil
 }
 

@@ -1,13 +1,12 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/generator"
+	"github.com/dosanma1/forge-cli/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -48,68 +47,165 @@ func init() {
 func runNew(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	reader := bufio.NewReader(os.Stdin)
+	fmt.Println(ui.TitleStyle.Render("🚀 Forge Workspace Setup"))
+	fmt.Println()
 
-	// Ask if user wants to create a backend service
-	fmt.Println("🔧 Backend Setup")
-	fmt.Print("Do you want to create a Go backend service? (Y/n): ")
+	// Collect services
+	type serviceSpec struct {
+		Name string
+		Type string
+	}
+	var services []serviceSpec
 
-	backendResponse, _ := reader.ReadString('\n')
-	backendResponse = strings.TrimSpace(strings.ToLower(backendResponse))
+	for {
+		fmt.Println(ui.SubtitleStyle.Render("🔧 Backend Service"))
+		createService, err := ui.AskConfirm("Create a backend service?", true)
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
 
-	createBackend := backendResponse == "" || backendResponse == "y" || backendResponse == "yes"
-	var backendServiceName string
+		if !createService {
+			break
+		}
 
-	if createBackend {
-		fmt.Print("Enter service name (e.g., api-server): ")
-		serviceNameInput, _ := reader.ReadString('\n')
-		backendServiceName = strings.TrimSpace(serviceNameInput)
+		_, serviceType, err := ui.AskSelect("Select service language:", []string{"Go", "NestJS"})
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
 
-		if backendServiceName == "" {
-			backendServiceName = "api-server" // default name
-			fmt.Printf("Using default name: %s\n", backendServiceName)
+		serviceName, err := ui.AskText("Service name (e.g., api-server):", "api-server")
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+
+		services = append(services, serviceSpec{
+			Name: serviceName,
+			Type: serviceType,
+		})
+
+		if len(services) == 1 {
+			addMore, err := ui.AskConfirm("Add another service?", false)
+			if err != nil {
+				return fmt.Errorf("cancelled: %w", err)
+			}
+			if !addMore {
+				break
+			}
 		}
 	}
 
-	// Ask if user wants to create a frontend app
-	fmt.Println("\n🎨 Frontend Setup")
-	fmt.Print("Do you want to create a frontend application? (y/N): ")
+	// Collect frontends
+	type frontendSpec struct {
+		Name       string
+		Type       string
+		Deployment string
+	}
+	var frontends []frontendSpec
 
-	response, _ := reader.ReadString('\n')
-	response = strings.TrimSpace(strings.ToLower(response))
-
-	createFrontend := response == "y" || response == "yes"
-	var frontendAppName string
-
-	if createFrontend {
-		fmt.Print("Enter frontend application name (e.g., web-app): ")
-		appNameInput, _ := reader.ReadString('\n')
-		frontendAppName = strings.TrimSpace(appNameInput)
-
-		if frontendAppName == "" {
-			frontendAppName = "web-app" // default name
-			fmt.Printf("Using default name: %s\n", frontendAppName)
+	for {
+		fmt.Println(ui.SubtitleStyle.Render("🎨 Frontend Application"))
+		createFrontend, err := ui.AskConfirm("Create a frontend application?", false)
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
 		}
+
+		if !createFrontend {
+			break
+		}
+
+		_, frontendType, err := ui.AskSelect("Select frontend framework:", []string{"Angular", "Next.js"})
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+
+		frontendName, err := ui.AskText("Application name (e.g., web-app):", "web-app")
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+
+		_, deployment, err := ui.AskSelect("Deployment target:", []string{"Firebase", "CloudRun", "GKE"})
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+
+		frontends = append(frontends, frontendSpec{
+			Name:       frontendName,
+			Type:       frontendType,
+			Deployment: deployment,
+		})
+
+		if len(frontends) == 1 {
+			addMore, err := ui.AskConfirm("Add another frontend?", false)
+			if err != nil {
+				return fmt.Errorf("cancelled: %w", err)
+			}
+			if !addMore {
+				break
+			}
+		}
+	}
+
+	// Show summary
+	fmt.Println()
+	fmt.Println(ui.TitleStyle.Render("📦 Workspace Summary"))
+	fmt.Println()
+	fmt.Printf("Workspace: %s\n", ui.SuccessStyle.Render(name))
+
+	if len(services) > 0 {
+		fmt.Println("\n" + ui.SubtitleStyle.Render("Services:"))
+		for _, svc := range services {
+			fmt.Printf("  • %s (%s)\n", svc.Name, svc.Type)
+		}
+	}
+
+	if len(frontends) > 0 {
+		fmt.Println("\n" + ui.SubtitleStyle.Render("Frontends:"))
+		for _, app := range frontends {
+			fmt.Printf("  • %s (%s → %s)\n", app.Name, app.Type, app.Deployment)
+		}
+	}
+
+	fmt.Println()
+	proceed, err := ui.AskConfirm("Proceed with generation?", true)
+	if err != nil || !proceed {
+		fmt.Println(ui.ErrorStyle.Render("✗ Cancelled"))
+		os.Exit(0)
 	}
 
 	// Create generator
 	gen := generator.NewWorkspaceGenerator()
 
-	// Prepare options
+	// Convert services and frontends to []interface{} for generator
+	var servicesData []interface{}
+	for _, svc := range services {
+		servicesData = append(servicesData, map[string]interface{}{
+			"Name": svc.Name,
+			"Type": svc.Type,
+		})
+	}
+
+	var frontendsData []interface{}
+	for _, app := range frontends {
+		frontendsData = append(frontendsData, map[string]interface{}{
+			"Name":       app.Name,
+			"Type":       app.Type,
+			"Deployment": app.Deployment,
+		})
+	}
+
+	// Prepare base options
 	opts := generator.GeneratorOptions{
 		OutputDir: ".",
 		Name:      name,
 		Data: map[string]interface{}{
-			"github_org":           newGitHubOrg,
-			"docker_registry":      newDockerRegistry,
-			"gcp_project_id":       newGCPProjectID,
-			"k8s_namespace":        newK8sNamespace,
-			"gke_region":           newGKERegion,
-			"gke_cluster":          newGKECluster,
-			"create_backend":       createBackend,
-			"backend_service_name": backendServiceName,
-			"create_frontend":      createFrontend,
-			"frontend_app_name":    frontendAppName,
+			"github_org":      newGitHubOrg,
+			"docker_registry": newDockerRegistry,
+			"gcp_project_id":  newGCPProjectID,
+			"k8s_namespace":   newK8sNamespace,
+			"gke_region":      newGKERegion,
+			"gke_cluster":     newGKECluster,
+			"services":        servicesData,
+			"frontends":       frontendsData,
 		},
 		DryRun: false,
 	}
@@ -119,6 +215,12 @@ func runNew(cmd *cobra.Command, args []string) error {
 	if err := gen.Generate(ctx, opts); err != nil {
 		return fmt.Errorf("failed to create workspace: %w", err)
 	}
+
+	fmt.Println()
+	fmt.Println(ui.SuccessStyle.Render("✓ Workspace created successfully!"))
+	fmt.Printf("\nNext steps:\n")
+	fmt.Printf("  cd %s\n", name)
+	fmt.Printf("  forge build\n")
 
 	return nil
 }

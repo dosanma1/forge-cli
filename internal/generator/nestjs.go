@@ -107,7 +107,7 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 	// Generate NestJS project using Nest CLI
 	fmt.Printf("🚀 Generating NestJS project: %s\n", serviceName)
 
-	if err := g.runNestCLI(servicesDir, []string{
+	if err := g.runNestJSCLI(servicesDir, config, []string{
 		"new", serviceName,
 		"--package-manager", "npm",
 		"--skip-git",
@@ -141,7 +141,7 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 
 	// Generate health controller using Nest CLI
 	fmt.Println("🏥 Generating health check controller...")
-	if err := g.runNestCLI(serviceDir, []string{"generate", "controller", "health", "--no-spec", "--flat"}); err != nil {
+	if err := g.runNestJSCLI(serviceDir, config, []string{"generate", "controller", "health", "--no-spec", "--flat"}); err != nil {
 		return fmt.Errorf("failed to generate health controller: %w", err)
 	}
 
@@ -257,9 +257,13 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 	return nil
 }
 
-// runNestCLI executes Nest CLI commands
-func (g *NestJSServiceGenerator) runNestCLI(workDir string, args []string) error {
-	return g.runCommand(workDir, "npx", append([]string{"@nestjs/cli@latest"}, args...)...)
+// runNestJSCLI executes NestJS CLI commands
+func (g *NestJSServiceGenerator) runNestJSCLI(workDir string, config *workspace.Config, args []string) error {
+	nestjsVersion := "11.1.9" // default
+	if config.Workspace.ToolVersions != nil && config.Workspace.ToolVersions.NestJS != "" {
+		nestjsVersion = config.Workspace.ToolVersions.NestJS
+	}
+	return g.runCommand(workDir, "npx", append([]string{fmt.Sprintf("@nestjs/cli@%s", nestjsVersion)}, args...)...)
 }
 
 // runNpmCommand executes npm commands
