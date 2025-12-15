@@ -66,11 +66,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 	config.Schema = "https://raw.githubusercontent.com/dosanma1/forge-cli/main/schemas/forge-config.v1.schema.json"
 	config.NewProjectRoot = "."
 
-	// Initialize CLI config
-	config.CLI = &workspace.CLIConfig{
-		DefaultBuildEnvironment: "local",
-	}
-
 	// Initialize workspace paths (kept for internal structure, not exposed in config)
 	// Frontend apps are in frontend/apps/<workspace>/projects/<app>/
 	// Backend services are in backend/services/<service>/
@@ -97,8 +92,6 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 	// Create directory structure
 	directories := []string{
 		filepath.Join(workspaceDir, "backend/services"),
-		filepath.Join(workspaceDir, "infra/helm"),
-		filepath.Join(workspaceDir, "infra/cloudrun"),
 		filepath.Join(workspaceDir, "docs"),
 	}
 
@@ -213,11 +206,6 @@ Thumbs.db
 		return fmt.Errorf("failed to create dependabot config: %w", err)
 	}
 
-	// Create root skaffold.yaml
-	if err := g.createRootSkaffold(workspaceDir, workspaceName); err != nil {
-		return fmt.Errorf("failed to create skaffold.yaml: %w", err)
-	}
-
 	// Track created services and frontend for Bazel config
 	var createdServices []string
 	hasFrontend := false
@@ -238,11 +226,6 @@ Thumbs.db
 	// Generate GitHub Actions workflows
 	if err := g.generateGitHubWorkflows(workspaceDir); err != nil {
 		return fmt.Errorf("failed to generate GitHub workflows: %w", err)
-	}
-
-	// Generate infrastructure templates (needs workspace config first)
-	if err := g.generateInfrastructure(workspaceDir); err != nil {
-		return fmt.Errorf("failed to generate infrastructure: %w", err)
 	}
 
 	// Generate backend services if requested
@@ -682,25 +665,6 @@ func (g *WorkspaceGenerator) createDependabotConfig(workspaceDir string) error {
 	dependabotPath := filepath.Join(githubDir, "dependabot.yml")
 	if err := os.WriteFile(dependabotPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to create dependabot.yml: %w", err)
-	}
-
-	return nil
-}
-
-// createRootSkaffold creates a minimal root skaffold.yaml file
-func (g *WorkspaceGenerator) createRootSkaffold(workspaceDir, workspaceName string) error {
-	data := map[string]interface{}{
-		"WorkspaceName": workspaceName,
-	}
-
-	content, err := g.engine.RenderTemplate("workspace/skaffold.yaml.tmpl", data)
-	if err != nil {
-		return fmt.Errorf("failed to render skaffold.yaml: %w", err)
-	}
-
-	skaffoldPath := filepath.Join(workspaceDir, "skaffold.yaml")
-	if err := os.WriteFile(skaffoldPath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to create skaffold.yaml: %w", err)
 	}
 
 	return nil

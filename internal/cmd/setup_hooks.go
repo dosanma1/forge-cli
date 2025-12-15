@@ -32,8 +32,6 @@ func init() {
 }
 
 func runSetupHooks(cmd *cobra.Command, args []string) error {
-	fmt.Println(ui.TitleStyle.Render("🔧 Setup Git Hooks & Code Quality"))
-	fmt.Println()
 
 	// Check if in a workspace
 	if _, err := os.Stat("forge.json"); os.IsNotExist(err) {
@@ -47,34 +45,44 @@ func runSetupHooks(cmd *cobra.Command, args []string) error {
 
 	// Check for git
 	if !isGitRepo() {
-		fmt.Println(ui.WarningStyle.Render("⚠️  Not a git repository. Initializing..."))
+		fmt.Println("⚠️  Not a git repository. Initializing...")
 		if err := initGit(); err != nil {
 			return fmt.Errorf("failed to initialize git: %w", err)
 		}
 	}
 
 	// Ask what to setup
-	_, options, err := ui.AskMultiSelect("Select tools to install:", []string{
-		"Husky (git hooks)",
-		"lint-staged (pre-commit)",
-		"commitlint (commit messages)",
-		"Prettier (formatting)",
-		"ESLint (linting)",
-	}, []int{})
+	fmt.Println("\nSelect tools to install:")
+
+	setupHusky, err := ui.AskConfirm("Install Husky (git hooks)?", true)
 	if err != nil {
 		return fmt.Errorf("cancelled: %w", err)
 	}
 
-	if len(options) == 0 {
-		fmt.Println(ui.WarningStyle.Render("No tools selected"))
-		return nil
+	setupLintStaged, err := ui.AskConfirm("Install lint-staged (pre-commit)?", true)
+	if err != nil {
+		return fmt.Errorf("cancelled: %w", err)
 	}
 
-	setupHusky := contains(options, "Husky (git hooks)")
-	setupLintStaged := contains(options, "lint-staged (pre-commit)")
-	setupCommitlint := contains(options, "commitlint (commit messages)")
-	setupPrettier := contains(options, "Prettier (formatting)")
-	setupESLint := contains(options, "ESLint (linting)")
+	setupCommitlint, err := ui.AskConfirm("Install commitlint (commit messages)?", true)
+	if err != nil {
+		return fmt.Errorf("cancelled: %w", err)
+	}
+
+	setupPrettier, err := ui.AskConfirm("Install Prettier (formatting)?", true)
+	if err != nil {
+		return fmt.Errorf("cancelled: %w", err)
+	}
+
+	setupESLint, err := ui.AskConfirm("Install ESLint (linting)?", true)
+	if err != nil {
+		return fmt.Errorf("cancelled: %w", err)
+	}
+
+	if !setupHusky && !setupLintStaged && !setupCommitlint && !setupPrettier && !setupESLint {
+		fmt.Println("No tools selected")
+		return nil
+	}
 
 	// Check if package.json exists
 	frontendDir := ""
@@ -116,7 +124,7 @@ func runSetupHooks(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(packages) > 0 {
-		fmt.Printf("\n%s\n", ui.SubtitleStyle.Render("Installing packages..."))
+		fmt.Println("\nInstalling packages...")
 		if err := installNpmPackages(workDir, packages, true); err != nil {
 			return err
 		}
@@ -124,7 +132,7 @@ func runSetupHooks(cmd *cobra.Command, args []string) error {
 
 	// Setup Husky
 	if setupHusky {
-		fmt.Printf("\n%s\n", ui.SubtitleStyle.Render("Setting up Husky..."))
+		fmt.Println("\nSetting up Husky...")
 		if err := setupHuskyHooks(workDir); err != nil {
 			return err
 		}
@@ -132,7 +140,7 @@ func runSetupHooks(cmd *cobra.Command, args []string) error {
 
 	// Setup lint-staged
 	if setupLintStaged && setupHusky {
-		fmt.Printf("\n%s\n", ui.SubtitleStyle.Render("Configuring lint-staged..."))
+		fmt.Println("\nConfiguring lint-staged...")
 		if err := createLintStagedConfig(); err != nil {
 			return err
 		}
@@ -140,7 +148,7 @@ func runSetupHooks(cmd *cobra.Command, args []string) error {
 
 	// Setup commitlint
 	if setupCommitlint {
-		fmt.Printf("\n%s\n", ui.SubtitleStyle.Render("Configuring commitlint..."))
+		fmt.Println("\nConfiguring commitlint...")
 		if err := createCommitlintConfig(); err != nil {
 			return err
 		}
@@ -148,14 +156,14 @@ func runSetupHooks(cmd *cobra.Command, args []string) error {
 
 	// Setup Prettier
 	if setupPrettier {
-		fmt.Printf("\n%s\n", ui.SubtitleStyle.Render("Configuring Prettier..."))
+		fmt.Println("\nConfiguring Prettier...")
 		if err := createPrettierConfig(); err != nil {
 			return err
 		}
 	}
 
 	fmt.Println()
-	fmt.Println(ui.SuccessStyle.Render("✓ Git hooks and code quality tools setup complete!"))
+	fmt.Println("✔ Git hooks and code quality tools setup complete.")
 
 	return nil
 }

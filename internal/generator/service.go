@@ -45,8 +45,8 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		return fmt.Errorf("invalid service name: %w", err)
 	}
 
-	// Load workspace config
-	config, err := workspace.LoadConfig(opts.OutputDir)
+	// Load workspace config (without project validation during workspace creation)
+	config, err := workspace.LoadConfigWithoutProjectValidation(opts.OutputDir)
 	if err != nil {
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
@@ -118,11 +118,10 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 
 	// Generate root files
 	rootTemplates := map[string]string{
-		"go.mod":        "service/go.mod.tmpl",
-		"BUILD.bazel":   "service/BUILD.bazel.tmpl",
-		"README.md":     "service/README.md.tmpl",
-		"Dockerfile":    "service/Dockerfile.tmpl",
-		"skaffold.yaml": "service/skaffold.yaml.tmpl",
+		"go.mod":      "service/go.mod.tmpl",
+		"BUILD.bazel": "service/BUILD.bazel.tmpl",
+		"README.md":   "service/README.md.tmpl",
+		"Dockerfile":  "service/Dockerfile.tmpl",
 	}
 
 	for filename, templatePath := range rootTemplates {
@@ -243,8 +242,9 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		Tags:        []string{"backend", "service"},
 		Architect: &workspace.Architect{
 			Build: &workspace.ArchitectTarget{
-				Builder: "@forge/go:build",
+				Builder: "@forge/bazel:build",
 				Options: map[string]interface{}{
+					"target":     "/cmd/server:image_tarball.tar",
 					"goVersion":  config.Workspace.ToolVersions.Go,
 					"registry":   dockerRegistry,
 					"dockerfile": "Dockerfile",
@@ -262,7 +262,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 				DefaultConfiguration: "production",
 			},
 			Deploy: &workspace.ArchitectTarget{
-				Deployer: "helm",
+				Deployer: "@forge/helm:deploy",
 				Options: map[string]interface{}{
 					"configPath": "deploy/helm",
 					"namespace":  "default",
@@ -298,11 +298,6 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		return fmt.Errorf("failed to save workspace config: %w", err)
 	}
 
-	// Update root skaffold.yaml
-	if err := updateRootSkaffold(opts.OutputDir, servicesPath, serviceName); err != nil {
-		return fmt.Errorf("failed to update root skaffold.yaml: %w", err)
-	}
-
 	// Run go mod tidy automatically
 	fmt.Printf("📦 Running go mod tidy for %s...\n", serviceName)
 	if err := g.runGoModTidy(serviceDir); err != nil {
@@ -311,11 +306,6 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		fmt.Printf("   Run 'cd %s && go mod tidy' manually\n", serviceDir)
 	} else {
 		fmt.Println("✓ Dependencies synchronized")
-	}
-
-	// Update root skaffold.yaml to include this service
-	if err := g.updateRootSkaffold(opts.OutputDir, config); err != nil {
-		return fmt.Errorf("failed to update root skaffold.yaml: %w", err)
 	}
 
 	// Update MODULE.bazel to include this service's go.mod
@@ -334,43 +324,6 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 	fmt.Printf("✓ Run 'forge build %s' to build the service\n", serviceName)
 	fmt.Printf("✓ Run 'forge test %s' to run tests\n", serviceName)
 	fmt.Printf("✓ Run 'forge run %s' to start the service\n", serviceName)
-
-	return nil
-}
-
-// updateRootSkaffold updates the root skaffold.yaml to include the new service
-func (g *ServiceGenerator) updateRootSkaffold(workspaceDir string, config *workspace.Config) error {
-	// Collect all services
-	var services []map[string]interface{}
-	for name, project := range config.Projects {
-		if project.Language == "go" {
-			services = append(services, map[string]interface{}{
-				"Name": name,
-			})
-		}
-	}
-
-	registry := "gcr.io/your-project"
-	if config.Workspace.Docker != nil {
-		registry = config.Workspace.Docker.Registry
-	}
-
-	data := map[string]interface{}{
-		"ProjectName":   config.Workspace.Name,
-		"Services":      services,
-		"HasAPIGateway": false,
-		"Registry":      registry,
-	}
-
-	content, err := g.engine.RenderTemplate("skaffold.yaml.tmpl", data)
-	if err != nil {
-		return fmt.Errorf("failed to render skaffold.yaml: %w", err)
-	}
-
-	skaffoldPath := filepath.Join(workspaceDir, "skaffold.yaml")
-	if err := os.WriteFile(skaffoldPath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write skaffold.yaml: %w", err)
-	}
 
 	return nil
 }

@@ -1,0 +1,269 @@
+package sync
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
+)
+
+const goBuildRootTemplate = `load("@gazelle//:def.bzl", "gazelle")
+
+# Run this to auto-update BUILD files:
+# bazel run //:gazelle
+gazelle(name = "gazelle")
+
+# gazelle:prefix {{.ImportPath}}
+
+exports_files([
+    "go.mod",
+    "go.sum",
+])
+`
+
+const goBuildLibraryTemplate = `load("@rules_go//go:def.bzl", "go_library"{{if .HasTests}}, "go_test"{{end}})
+
+go_library(
+    name = "{{.PackageName}}",
+    srcs = [{{range .Files}}
+        "{{.}}",{{end}}
+    ],
+    importpath = "{{.ImportPath}}",
+    visibility = ["//visibility:public"],
+)
+{{if .HasTests}}
+go_test(
+    name = "{{.PackageName}}_test",
+    srcs = [{{range .TestFiles}}
+        "{{.}}",{{end}}
+    ],
+    embed = [":{{.PackageName}}"],
+)
+{{end}}
+`
+
+const goBuildBinaryTemplate = `load("@rules_go//go:def.bzl", "go_binary", "go_library"{{if .HasTests}}, "go_test"{{end}})
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+
+go_library(
+    name = "lib",
+    srcs = [{{range .Files}}
+        "{{.}}",{{end}}
+    ],
+    importpath = "{{.ImportPath}}",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "{{.BinaryName}}",
+    embed = [":lib"],
+    visibility = ["//visibility:public"],
+)
+{{if .HasTests}}
+go_test(
+    name = "lib_test",
+    srcs = [{{range .TestFiles}}
+        "{{.}}",{{end}}
+    ],
+    embed = [":lib"],
+)
+{{end}}
+# Package binary into tar for container
+pkg_tar(
+    name = "tar",
+    srcs = [":{{.BinaryName}}"],
+    package_dir = "/app",
+)
+
+# Build container image
+oci_image(
+    name = "image",
+    base = "@distroless_base",
+    entrypoint = ["/app/{{.BinaryName}}"],
+    tars = [":tar"],
+)
+
+# Load image into Docker (for Skaffold)
+oci_load(
+    name = "image.tar",
+    image = ":image",
+    repo_tags = ["{{.ImageTag}}"],
+    format = "docker",
+)
+
+# Export tarball for Skaffold
+filegroup(
+    name = "image_tarball.tar",
+    srcs = [":image.tar"],
+    output_group = "tarball",
+    visibility = ["//visibility:public"],
+)
+`
+
+// GoBuildData contains template data for Go BUILD generation.
+type GoBuildData struct {
+	PackageName string
+	BinaryName  string
+	ImportPath  string
+	ImageTag    string
+	Files       []string
+	TestFiles   []string
+	HasTests    bool
+}
+
+// GenerateGoBuild creates BUILD.bazel content for a Go package.
+func (s *Syncer) GenerateGoBuild(pkg *GoPackage) (string, error) {
+	// Determine if this is a service root (has go.mod)
+	goModPath := filepath.Join(s.workspaceRoot, pkg.Path, "go.mod")
+	isServiceRoot := false
+	if _, err := os.Stat(goModPath); err == nil {
+		isServiceRoot = true
+	}
+
+	// Service root: gazelle config only
+	if isServiceRoot {
+		tmpl, err := template.New("BUILD.bazel").Parse(goBuildRootTemplate)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse template: %w", err)
+		}
+
+		var buf bytes.Buffer
+		data := struct{ ImportPath string }{ImportPath: pkg.ImportPath}
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return "", fmt.Errorf("failed to execute template: %w", err)
+		}
+
+		return buf.String(), nil
+	}
+
+	// Main package: binary BUILD
+	if pkg.IsMain {
+		return s.generateGoBinaryBuild(pkg)
+	}
+
+	// Library package: library BUILD
+	return s.generateGoLibraryBuild(pkg)
+}
+
+// generateGoLibraryBuild creates BUILD.bazel for a Go library.
+func (s *Syncer) generateGoLibraryBuild(pkg *GoPackage) (string, error) {
+	tmpl, err := template.New("BUILD.bazel").Parse(goBuildLibraryTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	packageName := filepath.Base(pkg.Path)
+	if packageName == "." {
+		packageName = filepath.Base(s.workspaceRoot)
+	}
+
+	data := GoBuildData{
+		PackageName: packageName,
+		ImportPath:  pkg.ImportPath,
+		Files:       pkg.Files,
+		TestFiles:   pkg.TestFiles,
+		HasTests:    len(pkg.TestFiles) > 0,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// generateGoBinaryBuild creates BUILD.bazel for a Go binary (main package).
+func (s *Syncer) generateGoBinaryBuild(pkg *GoPackage) (string, error) {
+	tmpl, err := template.New("BUILD.bazel").Parse(goBuildBinaryTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	// Binary name is the directory name
+	binaryName := filepath.Base(pkg.Path)
+	if binaryName == "." {
+		binaryName = filepath.Base(s.workspaceRoot)
+	}
+
+	// Image tag uses workspace name and binary name
+	imageTag := fmt.Sprintf("%s/%s:latest", s.config.Workspace.Name, binaryName)
+
+	data := GoBuildData{
+		BinaryName: binaryName,
+		ImportPath: pkg.ImportPath,
+		ImageTag:   imageTag,
+		Files:      pkg.Files,
+		TestFiles:  pkg.TestFiles,
+		HasTests:   len(pkg.TestFiles) > 0,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// WriteGoBuild writes a BUILD.bazel file for a Go package.
+func (s *Syncer) WriteGoBuild(pkg *GoPackage, content string, report *SyncReport) error {
+	buildPath := filepath.Join(s.workspaceRoot, pkg.Path, "BUILD.bazel")
+
+	if s.dryRun {
+		fmt.Printf("Would write: %s\n", buildPath)
+		return nil
+	}
+
+	// Create directory if needed
+	dir := filepath.Dir(buildPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	if err := os.WriteFile(buildPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write BUILD.bazel: %w", err)
+	}
+
+	report.CreatedFiles = append(report.CreatedFiles, buildPath)
+	return nil
+}
+
+// syncGoBuildFiles regenerates BUILD.bazel for all Go packages.
+func (s *Syncer) syncGoBuildFiles(report *SyncReport) error {
+	packages, err := s.DiscoverGoPackages()
+	if err != nil {
+		return fmt.Errorf("failed to discover Go packages: %w", err)
+	}
+
+	fmt.Printf("📦 Found %d Go packages\n", len(packages))
+
+	for _, pkg := range packages {
+		relPath := pkg.Path
+		if relPath == "." {
+			relPath = "root"
+		}
+
+		if pkg.IsMain {
+			fmt.Printf("   🔹 %s (binary)\n", relPath)
+		} else if strings.Contains(pkg.Path, string(filepath.Separator)) {
+			fmt.Printf("   🔸 %s (library)\n", relPath)
+		} else {
+			fmt.Printf("   🔸 %s (service root)\n", relPath)
+		}
+
+		content, err := s.GenerateGoBuild(pkg)
+		if err != nil {
+			return fmt.Errorf("failed to generate BUILD for %s: %w", pkg.Path, err)
+		}
+
+		if err := s.WriteGoBuild(pkg, content, report); err != nil {
+			return fmt.Errorf("failed to write BUILD for %s: %w", pkg.Path, err)
+		}
+	}
+
+	return nil
+}

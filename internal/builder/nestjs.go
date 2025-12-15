@@ -19,13 +19,13 @@ func NewNestJSBuilder() *NestJSBuilder {
 
 // Name returns the builder name
 func (b *NestJSBuilder) Name() string {
-	return "@forge/nestjs:build"
+	return "@forge/bazel:build"
 }
 
 // Build executes the NestJS build
-func (b *NestJSBuilder) Build(ctx context.Context, opts *BuildOptions) error {
+func (b *NestJSBuilder) Build(ctx context.Context, opts *BuildOptions) (*BuildArtifact, error) {
 	if err := b.Validate(opts); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Extract NestJS-specific options
@@ -88,25 +88,35 @@ func (b *NestJSBuilder) useBazel(projectRoot string) bool {
 }
 
 // buildWithBazel builds using Bazel
-func (b *NestJSBuilder) buildWithBazel(ctx context.Context, opts *BuildOptions) error {
+func (b *NestJSBuilder) buildWithBazel(ctx context.Context, opts *BuildOptions) (*BuildArtifact, error) {
 	cmd := exec.CommandContext(ctx, "bazel", "build", "//...")
 	cmd.Dir = opts.ProjectRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bazel build failed: %w", err)
+		return nil, fmt.Errorf("bazel build failed: %w", err)
 	}
 
-	return nil
+	artifact := &BuildArtifact{
+		Type: ArtifactTypeBinary,
+		Path: filepath.Join(opts.ProjectRoot, "bazel-bin"),
+		Tag:  opts.Configuration,
+		Metadata: map[string]interface{}{
+			"builder": "bazel",
+		},
+	}
+
+	return artifact, nil
 }
 
 // buildWithDocker builds using Docker
-func (b *NestJSBuilder) buildWithDocker(ctx context.Context, opts *BuildOptions, registry, dockerfile string) error {
+func (b *NestJSBuilder) buildWithDocker(ctx context.Context, opts *BuildOptions, registry, dockerfile string) (*BuildArtifact, error) {
 	projectName := filepath.Base(opts.ProjectRoot)
 	imageName := fmt.Sprintf("%s/%s", registry, projectName)
+	imageTag := fmt.Sprintf("%s:%s", imageName, opts.Configuration)
 
-	args := []string{"build", "-t", imageName}
+	args := []string{"build", "-t", imageTag}
 	if dockerfile != "" {
 		args = append(args, "-f", dockerfile)
 	}
@@ -118,18 +128,29 @@ func (b *NestJSBuilder) buildWithDocker(ctx context.Context, opts *BuildOptions,
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker build failed: %w", err)
+		return nil, fmt.Errorf("docker build failed: %w", err)
 	}
 
 	if opts.Verbose {
-		fmt.Printf("Successfully built image: %s\n", imageName)
+		fmt.Printf("Successfully built image: %s\n", imageTag)
 	}
 
-	return nil
+	artifact := &BuildArtifact{
+		Type:      ArtifactTypeImage,
+		Path:      "",
+		Tag:       opts.Configuration,
+		ImageName: imageTag,
+		Metadata: map[string]interface{}{
+			"builder":    "docker",
+			"dockerfile": dockerfile,
+		},
+	}
+
+	return artifact, nil
 }
 
 // buildWithNest builds using NestJS CLI
-func (b *NestJSBuilder) buildWithNest(ctx context.Context, opts *BuildOptions, tsconfig string) error {
+func (b *NestJSBuilder) buildWithNest(ctx context.Context, opts *BuildOptions, tsconfig string) (*BuildArtifact, error) {
 	// Run nest build
 	args := []string{"run", "build"}
 
@@ -139,14 +160,27 @@ func (b *NestJSBuilder) buildWithNest(ctx context.Context, opts *BuildOptions, t
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("nest build failed: %w", err)
+		return nil, fmt.Errorf("nest build failed: %w", err)
 	}
 
 	if opts.Verbose {
 		fmt.Printf("Successfully built NestJS project\n")
 	}
 
-	return nil
+	// NestJS builds to dist/ by default
+	outputPath := filepath.Join(opts.ProjectRoot, "dist")
+
+	artifact := &BuildArtifact{
+		Type: ArtifactTypeStatic,
+		Path: outputPath,
+		Tag:  opts.Configuration,
+		Metadata: map[string]interface{}{
+			"builder":  "nest",
+			"tsconfig": tsconfig,
+		},
+	}
+
+	return artifact, nil
 }
 
 func init() {

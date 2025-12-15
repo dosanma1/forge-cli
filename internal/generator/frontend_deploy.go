@@ -68,7 +68,8 @@ func (g *FrontendGenerator) generateDeploymentConfig(workspaceDir, appName, depl
 
 // generateFirebaseConfig generates Firebase hosting configuration
 func (g *FrontendGenerator) generateFirebaseConfig(workspaceDir, appName string, config *workspace.Config) error {
-	frontendDir := filepath.Join(workspaceDir, "frontend")
+	// Put Firebase config in the app directory (self-contained)
+	appDir := filepath.Join(workspaceDir, "frontend", "apps", appName)
 
 	// Get project ID from config or use default
 	projectID := "your-project-id"
@@ -77,7 +78,7 @@ func (g *FrontendGenerator) generateFirebaseConfig(workspaceDir, appName string,
 	}
 
 	// Check if .firebaserc exists
-	firebasercPath := filepath.Join(frontendDir, ".firebaserc")
+	firebasercPath := filepath.Join(appDir, ".firebaserc")
 	firebaseExists := false
 	if _, err := os.Stat(firebasercPath); err == nil {
 		firebaseExists = true
@@ -105,12 +106,12 @@ func (g *FrontendGenerator) generateFirebaseConfig(workspaceDir, appName string,
 		}
 
 		// Create firebase.json with hosting config
-		firebaseJsonPath := filepath.Join(frontendDir, "firebase.json")
+		firebaseJsonPath := filepath.Join(appDir, "firebase.json")
 		firebaseJsonContent := `{
   "hosting": [
     {
       "target": "` + appName + `",
-      "public": "dist/` + appName + `",
+      "public": "dist",
       "ignore": [
         "firebase.json",
         "**/.*",

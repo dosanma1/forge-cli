@@ -12,7 +12,8 @@ type Builder interface {
 	Name() string
 
 	// Build executes the build with the given options and configuration
-	Build(ctx context.Context, opts *BuildOptions) error
+	// Returns the build artifact and an error if the build fails
+	Build(ctx context.Context, opts *BuildOptions) (*BuildArtifact, error)
 
 	// Validate validates the build options
 	Validate(opts *BuildOptions) error
@@ -37,6 +38,12 @@ type BuildOptions struct {
 
 	// Verbose output
 	Verbose bool
+
+	// Platform is the target platform (e.g., "linux/amd64")
+	Platform string
+
+	// WorkspaceRoot is the absolute path to the workspace root
+	WorkspaceRoot string
 }
 
 // Registry holds all registered builders

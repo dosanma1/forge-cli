@@ -19,13 +19,13 @@ func NewGoBuilder() *GoBuilder {
 
 // Name returns the builder name
 func (b *GoBuilder) Name() string {
-	return "@forge/go:build"
+	return "@forge/bazel:build"
 }
 
 // Build executes the Go build
-func (b *GoBuilder) Build(ctx context.Context, opts *BuildOptions) error {
+func (b *GoBuilder) Build(ctx context.Context, opts *BuildOptions) (*BuildArtifact, error) {
 	if err := b.Validate(opts); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Extract Go-specific options
@@ -80,27 +80,38 @@ func (b *GoBuilder) useBazel(projectRoot string) bool {
 }
 
 // buildWithBazel builds using Bazel
-func (b *GoBuilder) buildWithBazel(ctx context.Context, opts *BuildOptions) error {
+func (b *GoBuilder) buildWithBazel(ctx context.Context, opts *BuildOptions) (*BuildArtifact, error) {
 	cmd := exec.CommandContext(ctx, "bazel", "build", "//...")
 	cmd.Dir = opts.ProjectRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bazel build failed: %w", err)
+		return nil, fmt.Errorf("bazel build failed: %w", err)
 	}
 
-	return nil
+	// For now, return a basic artifact - could be improved to detect actual output
+	artifact := &BuildArtifact{
+		Type: ArtifactTypeBinary,
+		Path: filepath.Join(opts.ProjectRoot, "bazel-bin"),
+		Tag:  opts.Configuration,
+		Metadata: map[string]interface{}{
+			"builder": "bazel",
+		},
+	}
+
+	return artifact, nil
 }
 
 // buildWithDocker builds using Docker
-func (b *GoBuilder) buildWithDocker(ctx context.Context, opts *BuildOptions, registry, dockerfile, ldflags string, race bool, tags []string) error {
+func (b *GoBuilder) buildWithDocker(ctx context.Context, opts *BuildOptions, registry, dockerfile, ldflags string, race bool, tags []string) (*BuildArtifact, error) {
 	// Get the project name from the directory
 	projectName := filepath.Base(opts.ProjectRoot)
 	imageName := fmt.Sprintf("%s/%s", registry, projectName)
+	imageTag := fmt.Sprintf("%s:%s", imageName, opts.Configuration)
 
 	// Build Docker image
-	args := []string{"build", "-t", imageName}
+	args := []string{"build", "-t", imageTag}
 	if dockerfile != "" {
 		args = append(args, "-f", dockerfile)
 	}
@@ -112,14 +123,25 @@ func (b *GoBuilder) buildWithDocker(ctx context.Context, opts *BuildOptions, reg
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker build failed: %w", err)
+		return nil, fmt.Errorf("docker build failed: %w", err)
 	}
 
 	if opts.Verbose {
-		fmt.Printf("Successfully built image: %s\n", imageName)
+		fmt.Printf("Successfully built image: %s\n", imageTag)
 	}
 
-	return nil
+	artifact := &BuildArtifact{
+		Type:      ArtifactTypeImage,
+		Path:      "", // Docker image doesn't have a file path
+		Tag:       opts.Configuration,
+		ImageName: imageTag,
+		Metadata: map[string]interface{}{
+			"builder":    "docker",
+			"dockerfile": dockerfile,
+		},
+	}
+
+	return artifact, nil
 }
 
 // Helper functions to extract typed values from map[string]interface{}

@@ -23,9 +23,9 @@ func (b *AngularBuilder) Name() string {
 }
 
 // Build executes the Angular build
-func (b *AngularBuilder) Build(ctx context.Context, opts *BuildOptions) error {
+func (b *AngularBuilder) Build(ctx context.Context, opts *BuildOptions) (*BuildArtifact, error) {
 	if err := b.Validate(opts); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Extract Angular-specific options
@@ -59,12 +59,31 @@ func (b *AngularBuilder) Build(ctx context.Context, opts *BuildOptions) error {
 		fmt.Printf("  Optimization: %v\n", optimization)
 	}
 
-	// Check if using Bazel
-	if b.useBazel(opts.ProjectRoot) {
-		return b.buildWithBazel(ctx, opts)
+	if err := b.buildWithNg(ctx, opts, angularConfig, outputPath, optimization, sourceMap); err != nil {
+		return nil, err
 	}
 
-	return b.buildWithNg(ctx, opts, angularConfig, outputPath, optimization, sourceMap)
+	// Construct the absolute path to the build output
+	angularJSONDir := b.findAngularJSONDir(opts.ProjectRoot)
+	absoluteOutputPath := filepath.Join(angularJSONDir, outputPath)
+
+	// Angular builds produce static files (HTML, CSS, JS)
+	artifact := &BuildArtifact{
+		Type: ArtifactTypeStatic,
+		Path: absoluteOutputPath,
+		Tag:  opts.Configuration,
+		Metadata: map[string]interface{}{
+			"projectName":  filepath.Base(opts.ProjectRoot),
+			"optimization": optimization,
+			"sourceMap":    sourceMap,
+		},
+	}
+
+	if opts.Verbose {
+		fmt.Printf("✅ Angular build completed: static files at %s\n", absoluteOutputPath)
+	}
+
+	return artifact, nil
 }
 
 // Validate validates the build options
@@ -86,27 +105,6 @@ func (b *AngularBuilder) Validate(opts *BuildOptions) error {
 		if _, err := os.Stat(angularJSON); os.IsNotExist(err) {
 			return fmt.Errorf("angular.json not found in project root or parent")
 		}
-	}
-
-	return nil
-}
-
-// useBazel checks if the project uses Bazel
-func (b *AngularBuilder) useBazel(projectRoot string) bool {
-	buildFile := filepath.Join(projectRoot, "BUILD.bazel")
-	_, err := os.Stat(buildFile)
-	return err == nil
-}
-
-// buildWithBazel builds using Bazel
-func (b *AngularBuilder) buildWithBazel(ctx context.Context, opts *BuildOptions) error {
-	cmd := exec.CommandContext(ctx, "bazel", "build", "//...")
-	cmd.Dir = opts.ProjectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bazel build failed: %w", err)
 	}
 
 	return nil

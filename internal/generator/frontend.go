@@ -55,8 +55,8 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("invalid application name: %w", err)
 	}
 
-	// Load workspace config
-	config, err := workspace.LoadConfig(opts.OutputDir)
+	// Load workspace config (without project validation during workspace creation)
+	config, err := workspace.LoadConfigWithoutProjectValidation(opts.OutputDir)
 	if err != nil {
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
@@ -69,80 +69,51 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return nil
 	}
 
-	// Check if this is the first Angular app (need to initialize workspace)
-	angularJsonPath := filepath.Join(frontendDir, "angular.json")
-	isFirstApp := true
-	if _, err := os.Stat(angularJsonPath); err == nil {
-		isFirstApp = false
+	// Create frontend/apps directory structure
+	frontendAppsDir := filepath.Join(frontendDir, "apps")
+	if err := os.MkdirAll(frontendAppsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create frontend/apps directory: %w", err)
 	}
 
-	if isFirstApp {
-		// Initialize Angular workspace using ng new
-		fmt.Println("🔧 Initializing Angular workspace...")
-
-		// Use ng new to create the workspace with proper Angular CLI setup
-		// Flags match monorepo-starter configuration
-		if err := g.runAngularCLI(opts.OutputDir, config, []string{
-			"new", "frontend",
-			"--directory=frontend",
-			"--create-application=false", // Don't create default app
-			"--routing=true",
-			"--style=css",
-			"--skip-git=true",
-			"--package-manager=npm",
-		}); err != nil {
-			return fmt.Errorf("failed to initialize Angular workspace: %w", err)
-		}
-
-		// Update angular.json with schematics defaults
-		if err := g.updateAngularJsonSchematics(frontendDir); err != nil {
-			return fmt.Errorf("failed to update angular.json: %w", err)
-		}
-
-		// Initialize Tailwind CSS
-		fmt.Println("🎨 Installing Tailwind CSS...")
-		if err := g.runNpmCommand(frontendDir, []string{"install", "tailwindcss", "@tailwindcss/postcss", "postcss", "--force"}); err != nil {
-			return fmt.Errorf("failed to install Tailwind: %w", err)
-		}
-
-		// Create .postcssrc.json from template
-		postcssContent, err := g.engine.RenderTemplate("frontend/.postcssrc.json.tmpl", map[string]interface{}{})
-		if err != nil {
-			return fmt.Errorf("failed to render .postcssrc.json: %w", err)
-		}
-		postcssPath := filepath.Join(frontendDir, ".postcssrc.json")
-		if err := os.WriteFile(postcssPath, []byte(postcssContent), 0644); err != nil {
-			return fmt.Errorf("failed to create .postcssrc.json: %w", err)
-		}
-
-		// Create .npmrc from template for Bazel + pnpm compatibility
-		npmrcContent, err := g.engine.RenderTemplate("frontend/.npmrc.tmpl", map[string]interface{}{})
-		if err != nil {
-			return fmt.Errorf("failed to render .npmrc: %w", err)
-		}
-		npmrcPath := filepath.Join(frontendDir, ".npmrc")
-		if err := os.WriteFile(npmrcPath, []byte(npmrcContent), 0644); err != nil {
-			return fmt.Errorf("failed to create .npmrc: %w", err)
-		}
-	}
-
-	// Create apps/<workspace> directory if it doesn't exist
-	if err := os.MkdirAll(frontendAppDir, 0755); err != nil {
-		return fmt.Errorf("failed to create frontend app directory: %w", err)
-	}
-
-	// Generate application using ng generate application
+	// Create Angular app at frontend/apps/<app-name> using ng new
 	fmt.Printf("📦 Generating Angular application: %s\n", appName)
 
-	if err := g.runAngularCLI(frontendDir, config, []string{
-		"generate", "application", appName,
-		"--project-root=apps/" + appName,
+	if err := g.runAngularCLI(frontendAppsDir, config, []string{
+		"new", appName,
+		"--directory=" + appName,
 		"--routing=true",
 		"--style=css",
-		"--skip-tests=false",
+		"--skip-git=true",
+		"--package-manager=npm",
 		"--standalone=true", // Use standalone components (Angular 19+)
 	}); err != nil {
-		return fmt.Errorf("failed to generate application: %w", err)
+		return fmt.Errorf("failed to generate Angular application: %w", err)
+	}
+
+	// Initialize Tailwind CSS
+	fmt.Println("🎨 Installing Tailwind CSS...")
+	if err := g.runNpmCommand(frontendAppDir, []string{"install", "tailwindcss", "@tailwindcss/postcss", "postcss", "--save-dev"}); err != nil {
+		return fmt.Errorf("failed to install Tailwind: %w", err)
+	}
+
+	// Create .postcssrc.json from template
+	postcssContent, err := g.engine.RenderTemplate("frontend/.postcssrc.json.tmpl", map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to render .postcssrc.json: %w", err)
+	}
+	postcssPath := filepath.Join(frontendAppDir, ".postcssrc.json")
+	if err := os.WriteFile(postcssPath, []byte(postcssContent), 0644); err != nil {
+		return fmt.Errorf("failed to create .postcssrc.json: %w", err)
+	}
+
+	// Create .npmrc from template for Bazel + pnpm compatibility
+	npmrcContent, err := g.engine.RenderTemplate("frontend/.npmrc.tmpl", map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to render .npmrc: %w", err)
+	}
+	npmrcPath := filepath.Join(frontendAppDir, ".npmrc")
+	if err := os.WriteFile(npmrcPath, []byte(npmrcContent), 0644); err != nil {
+		return fmt.Errorf("failed to create .npmrc: %w", err)
 	}
 
 	// Update app's styles.css with Tailwind import
@@ -186,14 +157,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		return fmt.Errorf("failed to generate deployment config: %w", err)
 	}
 
-	// Generate frontend root BUILD.bazel if this is the first app
-	if isFirstApp {
-		if err := g.generateFrontendRootBuildFile(frontendDir); err != nil {
-			return fmt.Errorf("failed to generate frontend root BUILD.bazel: %w", err)
-		}
-	}
-
-	// Generate BUILD.bazel for Bazel builds
+	// Generate BUILD.bazel for Bazel builds (self-contained)
 	if err := g.generateFrontendBuildFile(appDir, appName, deploymentTarget); err != nil {
 		return fmt.Errorf("failed to generate BUILD.bazel: %w", err)
 	}
@@ -206,8 +170,9 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 		Tags:        []string{"frontend", "angular", deploymentTarget},
 		Architect: &workspace.Architect{
 			Build: &workspace.ArchitectTarget{
-				Builder: "@forge/angular:build",
+				Builder: "@forge/bazel:build",
 				Options: map[string]interface{}{
+					"target":     ":build",
 					"outputPath": fmt.Sprintf("dist/%s", appName),
 					"environmentMapper": map[string]string{
 						"local":   "development",
@@ -240,7 +205,7 @@ func (g *FrontendGenerator) Generate(ctx context.Context, opts GeneratorOptions)
 				},
 			},
 			Deploy: &workspace.ArchitectTarget{
-				Deployer: deploymentTarget,
+				Deployer: fmt.Sprintf("@forge/%s:deploy", deploymentTarget),
 				Options: map[string]interface{}{
 					"configPath": fmt.Sprintf("deploy/%s", deploymentTarget),
 				},
@@ -387,28 +352,5 @@ func (g *FrontendGenerator) generateFrontendBuildFile(appDir, appName, deploymen
 	}
 
 	fmt.Printf("  ✓ Generated BUILD.bazel for Bazel builds\n")
-	return nil
-}
-
-// generateFrontendRootBuildFile creates BUILD.bazel at frontend root for shared configs
-func (g *FrontendGenerator) generateFrontendRootBuildFile(frontendDir string) error {
-	buildFilePath := filepath.Join(frontendDir, "BUILD.bazel")
-
-	// Check if it already exists
-	if _, err := os.Stat(buildFilePath); err == nil {
-		fmt.Println("  ℹ️  Frontend root BUILD.bazel already exists, skipping")
-		return nil
-	}
-
-	content, err := g.engine.RenderTemplate("frontend-root/BUILD.bazel.tmpl", map[string]interface{}{})
-	if err != nil {
-		return fmt.Errorf("failed to render frontend root BUILD.bazel template: %w", err)
-	}
-
-	if err := os.WriteFile(buildFilePath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write frontend root BUILD.bazel: %w", err)
-	}
-
-	fmt.Printf("  ✓ Generated frontend root BUILD.bazel for shared configs\n")
 	return nil
 }

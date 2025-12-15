@@ -2,7 +2,6 @@ package generator
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,14 +11,6 @@ import (
 	"github.com/dosanma1/forge-cli/internal/template"
 	"github.com/dosanma1/forge-cli/internal/workspace"
 )
-
-//go:embed templates/nestjs/BUILD.bazel.tmpl
-//go:embed templates/nestjs/skaffold.yaml.tmpl
-//go:embed templates/nestjs/Dockerfile.tmpl
-//go:embed templates/nestjs/src/health/health.controller.ts.tmpl
-//go:embed templates/nestjs/deploy/helm/values.yaml.tmpl
-//go:embed templates/nestjs/deploy/cloudrun/service.yaml.tmpl
-var nestjsTemplates embed.FS
 
 // NestJSServiceGenerator generates a new NestJS microservice.
 type NestJSServiceGenerator struct {
@@ -74,8 +65,8 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		}
 	}
 
-	// Load workspace config
-	config, err := workspace.LoadConfig(workspaceRoot)
+	// Load workspace config (without project validation during workspace creation)
+	config, err := workspace.LoadConfigWithoutProjectValidation(workspaceRoot)
 	if err != nil {
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}
@@ -139,12 +130,6 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		return fmt.Errorf("failed to install @nestjs/terminus: %w", err)
 	}
 
-	// Generate health controller using Nest CLI
-	fmt.Println("🏥 Generating health check controller...")
-	if err := g.runNestJSCLI(serviceDir, config, []string{"generate", "controller", "health", "--no-spec", "--flat"}); err != nil {
-		return fmt.Errorf("failed to generate health controller: %w", err)
-	}
-
 	// Create deploy directories
 	deployDirs := []string{
 		filepath.Join(serviceDir, "deploy", "helm"),
@@ -165,12 +150,11 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 	}
 
 	forgeFiles := map[string]string{
-		"BUILD.bazel":                     "templates/nestjs/BUILD.bazel.tmpl",
-		"skaffold.yaml":                   "templates/nestjs/skaffold.yaml.tmpl",
-		"Dockerfile":                      "templates/nestjs/Dockerfile.tmpl",
-		"src/health/health.controller.ts": "templates/nestjs/src/health/health.controller.ts.tmpl",
-		"deploy/helm/values.yaml":         "templates/nestjs/deploy/helm/values.yaml.tmpl",
-		"deploy/cloudrun/service.yaml":    "templates/nestjs/deploy/cloudrun/service.yaml.tmpl",
+		"BUILD.bazel":                     "BUILD.bazel.tmpl",
+		"Dockerfile":                      "Dockerfile.tmpl",
+		"src/health/health.controller.ts": "src/health/health.controller.ts.tmpl",
+		"deploy/helm/values.yaml":         "deploy/helm/values.yaml.tmpl",
+		"deploy/cloudrun/service.yaml":    "deploy/cloudrun/service.yaml.tmpl",
 	}
 
 	for outputPath, templatePath := range forgeFiles {
@@ -182,7 +166,7 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		}
 
 		// Read template from embedded filesystem
-		templateContent, err := nestjsTemplates.ReadFile(templatePath)
+		templateContent, err := template.TemplatesFS.ReadFile("templates/nestjs/" + templatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", templatePath, err)
 		}
@@ -211,12 +195,22 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		Tags:        []string{"backend", "nestjs", "service"},
 		Architect: &workspace.Architect{
 			Build: &workspace.ArchitectTarget{
-				Builder: "@forge/nestjs:build",
+				Builder: "@forge/bazel:build",
 				Options: map[string]interface{}{
+					"target":      ":image_tarball.tar",
 					"nodeVersion": "22.0.0",
 					"registry":    registry,
 					"dockerfile":  "Dockerfile",
 				},
+				Configurations: map[string]interface{}{
+					"development": map[string]interface{}{},
+					"local":       map[string]interface{}{},
+					"production": map[string]interface{}{
+						"optimization": true,
+						"registry":     registry,
+					},
+				},
+				DefaultConfiguration: "production",
 			},
 			Serve: &workspace.ArchitectTarget{
 				Builder: "@forge/nestjs:serve",
@@ -225,14 +219,25 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 				},
 			},
 			Deploy: &workspace.ArchitectTarget{
-				Deployer: "helm",
+				Deployer: "@forge/helm:deploy",
 				Options: map[string]interface{}{
-					"configPath": "deploy",
+					"configPath": "deploy/helm",
+					"healthPath": "/health",
+					"namespace":  "default",
 					"port":       3000,
-					"env": map[string]string{
-						"NODE_ENV": "development",
+				},
+				Configurations: map[string]interface{}{
+					"development": map[string]interface{}{
+						"namespace": "dev",
+					},
+					"local": map[string]interface{}{
+						"namespace": "default",
+					},
+					"production": map[string]interface{}{
+						"namespace": "prod",
 					},
 				},
+				DefaultConfiguration: "production",
 			},
 		},
 	}
@@ -241,11 +246,6 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 
 	if err := config.SaveToDir(workspaceRoot); err != nil {
 		return fmt.Errorf("failed to save workspace config: %w", err)
-	}
-
-	// Update root skaffold.yaml
-	if err := updateRootSkaffold(workspaceRoot, servicesPath, serviceName); err != nil {
-		return fmt.Errorf("failed to update root skaffold.yaml: %w", err)
 	}
 
 	fmt.Printf("\n✓ Created NestJS service: %s\n", serviceName)
@@ -307,53 +307,50 @@ func (g *NestJSServiceGenerator) updateAppModule(serviceDir string) error {
 	}
 
 	content := string(data)
+	lines := strings.Split(content, "\n")
 
-	// Add TerminusModule import
-	if !strings.Contains(content, "@nestjs/terminus") {
-		// Find the last import statement
-		importLines := strings.Split(content, "\n")
-		lastImportIdx := -1
-		for i, line := range importLines {
-			if strings.HasPrefix(strings.TrimSpace(line), "import ") {
-				lastImportIdx = i
-			}
-		}
-
-		if lastImportIdx != -1 {
-			// Insert TerminusModule import after last import
-			terminusImport := "import { TerminusModule } from '@nestjs/terminus';"
-			importLines = append(importLines[:lastImportIdx+1], append([]string{terminusImport}, importLines[lastImportIdx+1:]...)...)
-			content = strings.Join(importLines, "\n")
+	// Find the last import statement
+	lastImportIdx := -1
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "import ") {
+			lastImportIdx = i
 		}
 	}
 
-	// Add HealthController import
-	if !strings.Contains(content, "./health/health.controller") {
-		// Find the last import statement again
-		importLines := strings.Split(content, "\n")
-		lastImportIdx := -1
-		for i, line := range importLines {
-			if strings.HasPrefix(strings.TrimSpace(line), "import ") {
-				lastImportIdx = i
-			}
+	// Add imports after the last import statement
+	if lastImportIdx != -1 {
+		newImports := []string{}
+
+		// Add TerminusModule import if not present
+		if !strings.Contains(content, "@nestjs/terminus") {
+			newImports = append(newImports, "import { TerminusModule } from '@nestjs/terminus';")
 		}
 
-		if lastImportIdx != -1 {
-			// Insert HealthController import after last import
-			healthImport := "import { HealthController } from './health/health.controller';"
-			importLines = append(importLines[:lastImportIdx+1], append([]string{healthImport}, importLines[lastImportIdx+1:]...)...)
-			content = strings.Join(importLines, "\n")
+		// Add HealthController import if not present
+		if !strings.Contains(content, "./health/health.controller") {
+			newImports = append(newImports, "import { HealthController } from './health/health.controller';")
+		}
+
+		if len(newImports) > 0 {
+			lines = append(lines[:lastImportIdx+1], append(newImports, lines[lastImportIdx+1:]...)...)
+			content = strings.Join(lines, "\n")
 		}
 	}
 
-	// Add TerminusModule to imports array
-	if !strings.Contains(content, "TerminusModule") {
-		content = strings.Replace(content, "imports: [", "imports: [TerminusModule, ", 1)
+	// Add TerminusModule to imports array if not already there
+	// Check if TerminusModule is imported but not in the imports array
+	if strings.Contains(content, "import { TerminusModule }") && !strings.Contains(content, "imports: [TerminusModule") {
+		// Check if imports array is empty or has items
+		if strings.Contains(content, "imports: []") {
+			content = strings.Replace(content, "imports: []", "imports: [TerminusModule]", 1)
+		} else {
+			content = strings.Replace(content, "imports: [", "imports: [TerminusModule, ", 1)
+		}
 	}
 
-	// Add HealthController to controllers array
-	if !strings.Contains(content, "HealthController") {
-		content = strings.Replace(content, "controllers: [", "controllers: [HealthController, ", 1)
+	// Add HealthController to controllers array if not already there
+	if strings.Contains(content, "controllers: [") && strings.Contains(content, "HealthController") && !strings.Contains(content, "controllers: [HealthController") && !strings.Contains(content, "controllers: [AppController, HealthController") {
+		content = strings.Replace(content, "controllers: [AppController", "controllers: [AppController, HealthController", 1)
 	}
 
 	// Write updated app.module.ts

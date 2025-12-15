@@ -37,8 +37,6 @@ func init() {
 }
 
 func runProto(cmd *cobra.Command, args []string) error {
-	fmt.Println(ui.TitleStyle.Render("🔧 Protocol Buffer Compilation"))
-	fmt.Println()
 
 	// Find proto directories
 	protoDirs, err := findProtoDirs(".")
@@ -47,7 +45,7 @@ func runProto(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(protoDirs) == 0 {
-		fmt.Println(ui.ErrorStyle.Render("✗ No proto/ directories found"))
+		fmt.Println("No proto/ directories found")
 		fmt.Println("\nCreate a proto/ directory in your service with .proto files")
 		return nil
 	}
@@ -67,11 +65,11 @@ func runProto(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Printf("Using tool: %s\n\n", ui.SuccessStyle.Render(tool))
+	fmt.Printf("Using tool: %s\n\n", tool)
 
 	// Compile each directory
 	for _, dir := range protoDirs {
-		fmt.Printf("Compiling %s...\n", ui.SubtitleStyle.Render(dir))
+		fmt.Printf("Compiling %s...\n", dir)
 
 		var compileErr error
 		switch tool {
@@ -84,15 +82,15 @@ func runProto(cmd *cobra.Command, args []string) error {
 		}
 
 		if compileErr != nil {
-			fmt.Println(ui.ErrorStyle.Render(fmt.Sprintf("✗ Failed: %v", compileErr)))
+			fmt.Printf("✗ Failed: %v\n", compileErr)
 			return compileErr
 		}
 
-		fmt.Println(ui.SuccessStyle.Render("✓ Success"))
+		fmt.Println("✔ Success")
 		fmt.Println()
 	}
 
-	fmt.Println(ui.SuccessStyle.Render("✓ All proto files compiled successfully!"))
+	fmt.Println("✔ All proto files compiled successfully.")
 	return nil
 }
 
@@ -182,9 +180,31 @@ func compileProtoc(protoDir string) error {
 	}
 
 	// Determine output languages
-	_, languages, err := ui.AskMultiSelect("Select output languages:", []string{"Go", "TypeScript", "Python"}, []int{})
+	fmt.Println("\nSelect output languages:")
+
+	var languages []string
+	genGo, err := ui.AskConfirm("Generate Go code?", true)
 	if err != nil {
 		return err
+	}
+	if genGo {
+		languages = append(languages, "Go")
+	}
+
+	genTS, err := ui.AskConfirm("Generate TypeScript code?", false)
+	if err != nil {
+		return err
+	}
+	if genTS {
+		languages = append(languages, "TypeScript")
+	}
+
+	genPython, err := ui.AskConfirm("Generate Python code?", false)
+	if err != nil {
+		return err
+	}
+	if genPython {
+		languages = append(languages, "Python")
 	}
 
 	if len(languages) == 0 {

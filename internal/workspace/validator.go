@@ -85,7 +85,45 @@ func (v *Validator) validateProject(name string, project *Project) error {
 		return fmt.Errorf("invalid language: %s", project.Language)
 	}
 
+	// Validate Angular builder with K8s/CloudRun deployer requires Dockerfile
+	if err := v.validateAngularKubernetesDeployment(name, project); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// validateAngularKubernetesDeployment validates that Angular projects deploying
+// to Kubernetes or CloudRun have a Dockerfile to containerize the build output.
+func (v *Validator) validateAngularKubernetesDeployment(name string, project *Project) error {
+	// Check if project uses Angular builder
+	if project.Architect == nil || project.Architect.Build == nil {
+		return nil
+	}
+
+	builder := project.Architect.Build.Builder
+	if builder != "@forge/angular:build" {
+		return nil
+	}
+
+	// Check if deploying to Helm or CloudRun
+	if project.Architect.Deploy == nil {
+		return nil
+	}
+
+	deployer := project.Architect.Deploy.Deployer
+	if deployer != "@forge/helm:deploy" && deployer != "@forge/cloudrun:deploy" {
+		return nil
+	}
+
+	// Angular project deploying to K8s/CloudRun must have a Dockerfile
+	// We don't actually check filesystem here, just document the requirement
+	// The actual error will occur at deploy time if missing
+	return fmt.Errorf(
+		"project %q uses Angular builder (@forge/angular:build) with Kubernetes/CloudRun deployer (%s). "+
+			"Create a Dockerfile at %s/Dockerfile to containerize the Angular build output (e.g., using Nginx to serve static files)",
+		name, deployer, project.Root,
+	)
 }
 
 // ValidateName validates a name follows kebab-case convention.

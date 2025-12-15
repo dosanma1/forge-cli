@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/generator"
+	"github.com/dosanma1/forge-cli/internal/template"
 	"github.com/dosanma1/forge-cli/internal/ui"
+	"github.com/dosanma1/forge-cli/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -19,23 +21,32 @@ var generateCmd = &cobra.Command{
 	Long: `Generate application components using Forge generators.
 
 Available types:
-  service     Generate a new Go microservice
-  nestjs      Generate a new NestJS microservice
-  frontend    Generate an Angular application
+  service     Generate a new microservice (Go, NestJS)
+  app         Generate a new application (Angular, React)
   library     Generate a shared library
 
 Examples:
-  forge generate service user-service
-  forge generate nestjs api-gateway
+  forge generate service user-service --lang=go
+  forge generate service api-gateway --lang=nestjs
   forge g service payment-service
-  forge generate frontend admin-app
+  forge generate app admin-portal --lang=angular
+  forge g app web-app
   forge g library shared/auth`,
 }
 
+var (
+	serviceLanguage string
+	appLanguage     string
+)
+
 var generateServiceCmd = &cobra.Command{
 	Use:   "service [name]",
-	Short: "Generate a new Go microservice",
-	Long: `Generate a new Go microservice with Forge patterns.
+	Short: "Generate a new microservice",
+	Long: `Generate a new microservice with Forge patterns.
+
+Supports multiple languages:
+- Go: Standard Go microservice with HTTP server
+- NestJS: TypeScript microservice with NestJS framework
 
 The service will include:
 - Main application with HTTP server
@@ -43,13 +54,39 @@ The service will include:
 - Health check endpoint
 - Example API route
 - Dockerfile for containerization
+- Deployment configurations
 - README with documentation
 
 Examples:
-  forge generate service user-service
+  forge generate service user-service --lang=go
+  forge generate service api-gateway --lang=nestjs
   forge g service payment-service`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runGenerateService,
+}
+
+var generateAppCmd = &cobra.Command{
+	Use:   "app [name]",
+	Short: "Generate a new application",
+	Long: `Generate a new frontend application with Forge patterns.
+
+Supports multiple frameworks:
+- Angular: Standalone Angular application with Tailwind CSS
+- React: React application (coming soon)
+
+The application will include:
+- Framework-specific configuration
+- Tailwind CSS setup
+- TypeScript configuration
+- Package.json with dependencies
+- Deployment configurations
+
+Examples:
+  forge generate app web-app --lang=angular
+  forge generate app admin-portal --lang=angular
+  forge g app dashboard`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runGenerateApp,
 }
 
 var generateLibraryCmd = &cobra.Command{
@@ -65,10 +102,18 @@ Examples:
 }
 
 func init() {
+	generateServiceCmd.Flags().StringVarP(&serviceLanguage, "lang", "l", "", "Service language (go, nestjs)")
+	generateAppCmd.Flags().StringVarP(&appLanguage, "lang", "l", "", "Application language (angular, react)")
+
 	generateCmd.AddCommand(generateServiceCmd)
+	generateCmd.AddCommand(generateAppCmd)
+	generateCmd.AddCommand(generateLibraryCmd)
+
+	// Keep legacy commands for backward compatibility
 	generateCmd.AddCommand(generateNestJSCmd)
 	generateCmd.AddCommand(generateFrontendCmd)
-	generateCmd.AddCommand(generateLibraryCmd)
+	generateNestJSCmd.Hidden = true
+	generateFrontendCmd.Hidden = true
 }
 
 var generateNestJSCmd = &cobra.Command{
@@ -156,10 +201,41 @@ func runGenerateFrontend(cmd *cobra.Command, args []string) error {
 }
 
 func runGenerateService(cmd *cobra.Command, args []string) error {
-	serviceName := args[0]
+	var serviceName string
 
-	// Create generator
-	gen := generator.NewServiceGenerator()
+	// Prompt for name if not provided
+	if len(args) == 0 {
+		name, err := ui.AskText("Service name:", "")
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+		serviceName = name
+	} else {
+		serviceName = args[0]
+	}
+
+	// Prompt for language if not provided
+	if serviceLanguage == "" {
+		_, lang, err := ui.AskSelect("Select service language:", []string{"Go", "NestJS"})
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+		serviceLanguage = strings.ToLower(lang)
+	}
+
+	// Normalize language
+	serviceLanguage = strings.ToLower(serviceLanguage)
+
+	// Create appropriate generator
+	var gen generator.Generator
+	switch serviceLanguage {
+	case "go":
+		gen = generator.NewServiceGenerator()
+	case "nestjs":
+		gen = generator.NewNestJSServiceGenerator()
+	default:
+		return fmt.Errorf("unsupported service language: %s (supported: go, nestjs)", serviceLanguage)
+	}
 
 	// Prepare options
 	opts := generator.GeneratorOptions{
@@ -171,7 +247,60 @@ func runGenerateService(cmd *cobra.Command, args []string) error {
 	// Generate service
 	ctx := context.Background()
 	if err := gen.Generate(ctx, opts); err != nil {
-		return fmt.Errorf("failed to generate service: %w", err)
+		return fmt.Errorf("failed to generate %s service: %w", serviceLanguage, err)
+	}
+
+	return nil
+}
+
+func runGenerateApp(cmd *cobra.Command, args []string) error {
+	var appName string
+
+	// Prompt for name if not provided
+	if len(args) == 0 {
+		name, err := ui.AskText("Application name:", "")
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+		appName = name
+	} else {
+		appName = args[0]
+	}
+
+	// Prompt for language if not provided
+	if appLanguage == "" {
+		_, lang, err := ui.AskSelect("Select application framework:", []string{"Angular", "React"})
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+		appLanguage = strings.ToLower(lang)
+	}
+
+	// Normalize language
+	appLanguage = strings.ToLower(appLanguage)
+
+	// Create appropriate generator
+	var gen generator.Generator
+	switch appLanguage {
+	case "angular":
+		gen = generator.NewFrontendGenerator()
+	case "react":
+		return fmt.Errorf("React support coming soon")
+	default:
+		return fmt.Errorf("unsupported app framework: %s (supported: angular, react)", appLanguage)
+	}
+
+	// Prepare options
+	opts := generator.GeneratorOptions{
+		OutputDir: ".",
+		Name:      appName,
+		DryRun:    false,
+	}
+
+	// Generate app
+	ctx := context.Background()
+	if err := gen.Generate(ctx, opts); err != nil {
+		return fmt.Errorf("failed to generate %s app: %w", appLanguage, err)
 	}
 
 	return nil
@@ -179,9 +308,6 @@ func runGenerateService(cmd *cobra.Command, args []string) error {
 
 func runGenerateLibrary(cmd *cobra.Command, args []string) error {
 	libPath := args[0]
-
-	fmt.Println(ui.TitleStyle.Render("📦 Generate Library"))
-	fmt.Println()
 
 	// Determine library type
 	_, libType, err := ui.AskSelect("Select library type:", []string{"Go", "TypeScript"})
@@ -199,7 +325,7 @@ func runGenerateLibrary(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("path already exists: %s", libPath)
 	}
 
-	fmt.Printf("\nCreating %s library at %s...\n\n", libType, ui.SuccessStyle.Render(libPath))
+	fmt.Printf("CREATE %s (%s)\n", libPath, libType)
 
 	switch libType {
 	case "Go":
@@ -212,7 +338,7 @@ func runGenerateLibrary(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Println(ui.SuccessStyle.Render("✓ Library created successfully!"))
+	fmt.Println("✔ Library created successfully.")
 	return nil
 }
 
@@ -278,13 +404,23 @@ import "%s"
 		return fmt.Errorf("failed to create .go file: %w", err)
 	}
 
+	// Generate BUILD.bazel from template
+	if err := generateLibraryBuildFile(path, modulePath, packageName); err != nil {
+		return fmt.Errorf("failed to generate BUILD.bazel: %w", err)
+	}
+
+	// Register library in forge.json
+	if err := registerLibraryInForgeConfig(path, modulePath); err != nil {
+		return fmt.Errorf("failed to register library: %w", err)
+	}
+
 	// Try to add to go.work if it exists
 	workspacePath, err := findGoWorkspace()
 	if err == nil {
 		if err := addToGoWorkspace(workspacePath, path); err != nil {
 			fmt.Printf("⚠️  Could not add to go.work: %v\n", err)
 		} else {
-			fmt.Println(ui.SuccessStyle.Render("✓ Added to go.work"))
+			fmt.Println("✔ Added to go.work")
 		}
 	}
 
@@ -440,4 +576,101 @@ func addToGoWorkspace(workspacePath, modulePath string) error {
 	}
 
 	return os.WriteFile(workspacePath, []byte(workContent), 0644)
+}
+
+// generateLibraryBuildFile creates BUILD.bazel for a library
+func generateLibraryBuildFile(libPath, importPath, packageName string) error {
+	// Read template
+	templateContent, err := template.TemplatesFS.ReadFile("templates/library/BUILD.bazel.tmpl")
+	if err != nil {
+		return fmt.Errorf("failed to read BUILD template: %w", err)
+	}
+
+	// Get library name from path (with dashes) for Bazel target
+	libName := filepath.Base(libPath)
+
+	// Prepare template data
+	data := struct {
+		PackageName string
+		ImportPath  string
+		Files       []string
+		TestFiles   []string
+		HasTests    bool
+	}{
+		PackageName: libName, // Use library name (with dashes) for Bazel target
+		ImportPath:  importPath,
+		Files:       []string{packageName + ".go"}, // Use package name (no dashes) for filename
+		TestFiles:   []string{},
+		HasTests:    false,
+	}
+
+	// Render template
+	engine := template.NewEngine()
+	rendered, err := engine.Render(string(templateContent), data)
+	if err != nil {
+		return fmt.Errorf("failed to render BUILD template: %w", err)
+	}
+
+	// Write BUILD.bazel
+	buildPath := filepath.Join(libPath, "BUILD.bazel")
+	if err := os.WriteFile(buildPath, []byte(rendered), 0644); err != nil {
+		return fmt.Errorf("failed to write BUILD.bazel: %w", err)
+	}
+
+	fmt.Println("✔ Generated BUILD.bazel")
+	return nil
+}
+
+// registerLibraryInForgeConfig adds the library to forge.json
+func registerLibraryInForgeConfig(libPath, importPath string) error {
+	// Find workspace root
+	workspaceRoot, err := findWorkspaceRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find workspace root: %w", err)
+	}
+
+	// Load workspace config
+	config, err := workspace.LoadConfig(workspaceRoot)
+	if err != nil {
+		return fmt.Errorf("failed to load workspace config: %w", err)
+	}
+
+	// Get relative path from workspace root
+	relPath, err := filepath.Rel(workspaceRoot, libPath)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path: %w", err)
+	}
+
+	// Create library name from path (e.g., "shared/go-kit" -> "go-kit")
+	libName := filepath.Base(relPath)
+
+	// Register library project
+	project := &workspace.Project{
+		ProjectType: "library",
+		Language:    "go",
+		Root:        relPath,
+		Tags:        []string{"library", "shared"},
+		Architect: &workspace.Architect{
+			Build: &workspace.ArchitectTarget{
+				Builder: "@forge/bazel:build",
+				Options: map[string]interface{}{
+					"target": fmt.Sprintf(":%s", libName),
+				},
+				Configurations: map[string]interface{}{
+					"production": map[string]interface{}{},
+				},
+				DefaultConfiguration: "production",
+			},
+		},
+	}
+
+	config.AddProject(libName, project)
+
+	// Save config
+	if err := config.SaveToDir(workspaceRoot); err != nil {
+		return fmt.Errorf("failed to save forge.json: %w", err)
+	}
+
+	fmt.Printf("✔ Registered library in forge.json\n")
+	return nil
 }

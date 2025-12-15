@@ -140,9 +140,8 @@
                                                 "type": "string",
                                                 "description": "Builder to use",
                                                 "enum": [
-                                                    "@forge/go:build",
-                                                    "@forge/angular:build",
-                                                    "@forge/nestjs:build"
+                                                    "@forge/bazel:build",
+                                                    "@forge/angular:build"
                                                 ]
                                             },
                                             "options": {
@@ -208,11 +207,9 @@
                                                 "type": "string",
                                                 "description": "Deployment target",
                                                 "enum": [
-                                                    "helm",
-                                                    "cloudrun",
-                                                    "firebase",
-                                                    "vercel",
-                                                    "cloudflare-pages"
+                                                    "@forge/helm:deploy",
+                                                    "@forge/cloudrun:deploy",
+                                                    "@forge/firebase:deploy"
                                                 ]
                                             },
                                             "options": {
@@ -230,7 +227,64 @@
                                                 "type": "string",
                                                 "description": "Default deployment configuration"
                                             }
-                                        }
+                                        },
+                                        "allOf": [
+                                            {
+                                                "if": {
+                                                    "properties": {
+                                                        "deployer": {
+                                                            "const": "@forge/helm:deploy"
+                                                        }
+                                                    }
+                                                },
+                                                "then": {
+                                                    "properties": {
+                                                        "options": {
+                                                            "required": [
+                                                                "namespace"
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            {
+                                                "if": {
+                                                    "properties": {
+                                                        "deployer": {
+                                                            "const": "@forge/firebase:deploy"
+                                                        }
+                                                    }
+                                                },
+                                                "then": {
+                                                    "properties": {
+                                                        "options": {
+                                                            "required": [
+                                                                "projectId"
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            {
+                                                "if": {
+                                                    "properties": {
+                                                        "deployer": {
+                                                            "const": "@forge/cloudrun:deploy"
+                                                        }
+                                                    }
+                                                },
+                                                "then": {
+                                                    "properties": {
+                                                        "options": {
+                                                            "required": [
+                                                                "projectId",
+                                                                "region"
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        ]
                                     },
                                     "test": {
                                         "type": "object",
@@ -420,13 +474,17 @@
                                                 "options": {
                                                     "type": "object",
                                                     "properties": {
-                                                        "project": {
+                                                        "projectId": {
                                                             "type": "string",
                                                             "description": "Firebase project ID"
                                                         },
-                                                        "site": {
+                                                        "target": {
                                                             "type": "string",
-                                                            "description": "Firebase hosting site"
+                                                            "description": "Firebase hosting target (optional)"
+                                                        },
+                                                        "configPath": {
+                                                            "type": "string",
+                                                            "description": "Path to Firebase config directory"
                                                         }
                                                     }
                                                 }
@@ -498,17 +556,6 @@
                         }
                     }
                 ]
-            }
-        },
-        "cli": {
-            "type": "object",
-            "description": "CLI configuration and defaults",
-            "properties": {
-                "defaultBuildEnvironment": {
-                    "type": "string",
-                    "description": "Default build environment",
-                    "default": "local"
-                }
             }
         }
     }

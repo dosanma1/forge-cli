@@ -15,6 +15,8 @@ Forge consists of two repositories:
 
 ## Installation
 
+### Install Forge CLI
+
 ```bash
 # Install forge-cli
 go install github.com/dosanma1/forge-cli/cmd/forge@latest
@@ -23,6 +25,267 @@ go install github.com/dosanma1/forge-cli/cmd/forge@latest
 git clone https://github.com/dosanma1/forge-cli
 cd forge-cli
 go build -o forge cmd/forge/main.go
+```
+
+### Prerequisites
+
+Forge requires several tools to be installed depending on which features you want to use:
+
+#### Essential Tools (Required for all features)
+
+**Bazel** - Build system
+
+- **macOS**: `brew install bazelisk`
+- **Linux**:
+  ```bash
+  wget https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+  chmod +x bazelisk-linux-amd64
+  sudo mv bazelisk-linux-amd64 /usr/local/bin/bazel
+  ```
+- **Windows**: `choco install bazelisk` or download from [releases](https://github.com/bazelbuild/bazelisk/releases)
+
+**Skaffold** - Development & deployment orchestration
+
+- **macOS**: `brew install skaffold`
+- **Linux**:
+  ```bash
+  curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+  chmod +x skaffold
+  sudo mv skaffold /usr/local/bin
+  ```
+- **Windows**: `choco install skaffold` or download from [releases](https://github.com/GoogleContainerTools/skaffold/releases)
+
+**Docker** - Container runtime
+
+- **macOS**: Download [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop)
+- **Linux**:
+  ```bash
+  curl -fsSL https://get.docker.com -o get-docker.sh
+  sudo sh get-docker.sh
+  ```
+- **Windows**: Download [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop)
+
+**Helm** - Kubernetes package manager
+
+- **macOS**: `brew install helm`
+- **Linux**:
+  ```bash
+  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  ```
+- **Windows**: `choco install kubernetes-helm`
+
+**kubectl** - Kubernetes CLI
+
+- **macOS**: `brew install kubectl`
+- **Linux**:
+  ```bash
+  curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+  chmod +x kubectl
+  sudo mv kubectl /usr/local/bin/
+  ```
+- **Windows**: `choco install kubernetes-cli`
+
+**Go** - Go programming language
+
+- **macOS**: `brew install go`
+- **Linux**: Download from [go.dev/dl](https://go.dev/dl/)
+- **Windows**: Download installer from [go.dev/dl](https://go.dev/dl/)
+
+**Node.js** - JavaScript runtime (includes npm)
+
+- **macOS**: `brew install node`
+- **Linux**:
+  ```bash
+  curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+  ```
+- **Windows**: Download installer from [nodejs.org](https://nodejs.org/)
+
+#### Cloud Platform Tools (Required for cloud deployments)
+
+**Google Cloud SDK** - For GKE, Cloud Run, and GCR
+
+- **macOS**: `brew install --cask google-cloud-sdk`
+- **Linux**:
+  ```bash
+  curl https://sdk.cloud.google.com | bash
+  exec -l $SHELL
+  ```
+- **Windows**: Download installer from [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install)
+
+After installation:
+
+```bash
+gcloud auth login
+gcloud auth configure-docker
+```
+
+**Firebase CLI** - For Firebase deployments
+
+- **All platforms**: `npm install -g firebase-tools`
+
+After installation:
+
+```bash
+firebase login
+```
+
+#### Framework CLIs (Required for respective frameworks)
+
+**Angular CLI** - For Angular applications
+
+```bash
+npm install -g @angular/cli
+```
+
+**NestJS CLI** - For NestJS services
+
+```bash
+npm install -g @nestjs/cli
+```
+
+#### Protocol Buffers (Required if using gRPC/protobuf)
+
+**protoc** - Protocol buffer compiler
+
+- **macOS**: `brew install protobuf`
+- **Linux**:
+  ```bash
+  sudo apt-get install -y protobuf-compiler
+  ```
+- **Windows**: Download from [protobuf releases](https://github.com/protocolbuffers/protobuf/releases)
+
+**OR buf** - Modern protobuf tool (recommended alternative)
+
+- **macOS**: `brew install bufbuild/buf/buf`
+- **Linux**:
+  ```bash
+  curl -sSL "https://github.com/bufbuild/buf/releases/latest/download/buf-$(uname -s)-$(uname -m)" -o /usr/local/bin/buf
+  chmod +x /usr/local/bin/buf
+  ```
+- **Windows**: Download from [buf releases](https://github.com/bufbuild/buf/releases)
+
+#### Local Kubernetes (Optional, recommended for local development)
+
+**Kind** - Kubernetes in Docker
+
+- **macOS**: `brew install kind`
+- **Linux**:
+  ```bash
+  curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+  chmod +x ./kind
+  sudo mv ./kind /usr/local/bin/kind
+  ```
+- **Windows**: `choco install kind`
+
+#### Quick Install (macOS)
+
+Install all tools at once on macOS:
+
+```bash
+# Essential tools
+brew install bazelisk skaffold helm kubectl go node
+
+# Docker Desktop (manual installation required)
+# Download from https://www.docker.com/products/docker-desktop
+
+# Cloud tools
+brew install --cask google-cloud-sdk
+npm install -g firebase-tools
+
+# Framework CLIs
+npm install -g @angular/cli @nestjs/cli
+
+# Protocol buffers
+brew install protobuf
+# OR
+brew install bufbuild/buf/buf
+
+# Local Kubernetes
+brew install kind
+
+# Authenticate with cloud providers
+gcloud auth login
+gcloud auth configure-docker
+firebase login
+```
+
+#### Quick Install (Linux - Debian/Ubuntu)
+
+```bash
+# Essential tools
+# Bazel
+wget https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+chmod +x bazelisk-linux-amd64
+sudo mv bazelisk-linux-amd64 /usr/local/bin/bazel
+
+# Skaffold
+curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
+chmod +x skaffold
+sudo mv skaffold /usr/local/bin
+
+# Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/
+
+# Go (visit go.dev/dl for latest version)
+wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+
+# Node.js
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Cloud tools
+curl https://sdk.cloud.google.com | bash
+exec -l $SHELL
+npm install -g firebase-tools
+
+# Framework CLIs
+npm install -g @angular/cli @nestjs/cli
+
+# Protocol buffers
+sudo apt-get install -y protobuf-compiler
+
+# Kind
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+chmod +x ./kind
+sudo mv ./kind /usr/local/bin/kind
+
+# Authenticate
+gcloud auth login
+gcloud auth configure-docker
+firebase login
+```
+
+#### Verify Installation
+
+After installation, verify all tools are available:
+
+```bash
+bazel version
+skaffold version
+docker --version
+helm version
+kubectl version --client
+go version
+node --version
+npm --version
+gcloud --version
+firebase --version
+ng version
+nest --version
+protoc --version  # or: buf --version
+kind version
 ```
 
 ## Quick Start

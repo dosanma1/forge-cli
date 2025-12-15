@@ -14,6 +14,9 @@ import (
 //go:embed all:templates
 var templatesFS embed.FS
 
+// TemplatesFS exposes the embedded templates filesystem
+var TemplatesFS = templatesFS
+
 // Engine provides template rendering capabilities.
 type Engine struct {
 	funcMap template.FuncMap

@@ -1,0 +1,106 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: {{.ServiceName}}
+
+# Bazel Integration: NestJS service using Bazel for TypeScript compilation and OCI image building
+build:
+  artifacts:
+    - image: {{.ServiceName}}
+      bazel:
+        target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
+  tagPolicy:
+    gitCommit:
+      variant: AbbrevCommitSha
+
+deploy:
+  helm:
+    releases:
+      - name: {{.ServiceName}}
+        chartPath: ../../../infra/helm/service
+        valuesFiles:
+          - ./deploy/helm/values.yaml
+        namespace: {{.WorkspaceName}}
+        createNamespace: true
+        setValueTemplates:
+          image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+          image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
+
+profiles:
+  - name: local
+    build:
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
+      local:
+        push: false
+    deploy:
+      helm:
+        releases:
+          - name: {{.ServiceName}}
+            chartPath: ../../../infra/helm/service
+            valuesFiles:
+              - ./deploy/helm/values.yaml
+            namespace: {{.WorkspaceName}}
+            createNamespace: true
+            setValues:
+              image.pullPolicy: IfNotPresent
+            setValueTemplates:
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}`}}"
+
+  - name: dev
+    build:
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
+      googleCloudBuild:
+        projectId: <no value>
+    deploy:
+      helm:
+        releases:
+          - name: {{.ServiceName}}-dev
+            chartPath: ../../../infra/helm/service
+            valuesFiles:
+              - ./deploy/helm/values.yaml
+            namespace: dev
+            createNamespace: true
+            setValueTemplates:
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
+
+  - name: prod
+    build:
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
+      googleCloudBuild:
+        projectId: <no value>
+    deploy:
+      helm:
+        releases:
+          - name: {{.ServiceName}}-prod
+            chartPath: ../../../infra/helm/service
+            valuesFiles:
+              - ./deploy/helm/values.yaml
+            namespace: prod
+            createNamespace: true
+            setValueTemplates:
+              image.repository: "{{`{{.IMAGE_REPO_`}}{{.ServiceName}}{{`}}`}}"
+              image.tag: "{{`{{.IMAGE_TAG_`}}{{.ServiceName}}{{`}}@{{.IMAGE_DIGEST_`}}{{.ServiceName}}{{`}}`}}"
+
+  - name: cloudrun
+    build:
+      artifacts:
+        - image: {{.ServiceName}}
+          bazel:
+            target: //{{.ServicesPath}}/{{.ServiceName}}:image_tarball.tar
+      googleCloudBuild:
+        projectId: <no value>
+    deploy:
+      cloudrun:
+        projectid: <no value>
+        region: us-central1

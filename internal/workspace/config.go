@@ -17,12 +17,6 @@ type Config struct {
 	Workspace      WorkspaceMetadata  `json:"workspace"`
 	NewProjectRoot string             `json:"newProjectRoot,omitempty"`
 	Projects       map[string]Project `json:"projects"`
-	CLI            *CLIConfig         `json:"cli,omitempty"`
-}
-
-// CLIConfig contains CLI configuration and defaults
-type CLIConfig struct {
-	DefaultBuildEnvironment string `json:"defaultBuildEnvironment,omitempty"`
 }
 
 // Architect contains build, serve, deploy, and test targets
@@ -161,6 +155,33 @@ func LoadConfigFrom(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// Validate the configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	return &config, nil
+}
+
+// LoadConfigWithoutProjectValidation loads the workspace configuration without validating projects.
+// This is useful during workspace initialization when projects are being added.
+func LoadConfigWithoutProjectValidation(dir string) (*Config, error) {
+	configPath := filepath.Join(dir, ConfigFileName)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Only validate workspace name
+	if config.Workspace.Name == "" {
+		return nil, fmt.Errorf("workspace.name is required")
+	}
+
 	return &config, nil
 }
 
@@ -224,4 +245,88 @@ func (c *Config) ListProjects() []Project {
 		projects = append(projects, project)
 	}
 	return projects
+}
+
+// Validate validates the workspace configuration.
+func (c *Config) Validate() error {
+	// Check workspace name
+	if c.Workspace.Name == "" {
+		return fmt.Errorf("workspace.name is required")
+	}
+
+	// Check projects exist
+	if len(c.Projects) == 0 {
+		return fmt.Errorf("at least one project is required")
+	}
+
+	// Validate each project
+	for name, project := range c.Projects {
+		if err := c.validateProject(name, project); err != nil {
+			return fmt.Errorf("project %q: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// validateProject validates a single project configuration.
+func (c *Config) validateProject(name string, project Project) error {
+	// Check project root
+	if project.Root == "" {
+		return fmt.Errorf("root is required")
+	}
+
+	// Check architect section
+	if project.Architect == nil {
+		return fmt.Errorf("architect is required")
+	}
+
+	// Check build configuration
+	if project.Architect.Build == nil {
+		return fmt.Errorf("architect.build is required")
+	}
+
+	if project.Architect.Build.Configurations == nil || len(project.Architect.Build.Configurations) == 0 {
+		return fmt.Errorf("architect.build.configurations must have at least one configuration")
+	}
+
+	// For libraries, deploy configuration is optional
+	// Only services and applications require deployment configuration
+	if project.ProjectType != "library" {
+		// Check deploy configuration
+		if project.Architect.Deploy == nil {
+			return fmt.Errorf("architect.deploy is required")
+		}
+
+		if project.Architect.Deploy.Configurations == nil || len(project.Architect.Deploy.Configurations) == 0 {
+			return fmt.Errorf("architect.deploy.configurations must have at least one configuration")
+		}
+
+		// Validate configuration keys match between build and deploy
+		buildKeys := make(map[string]bool)
+		for key := range project.Architect.Build.Configurations {
+			buildKeys[key] = true
+		}
+
+		deployKeys := make(map[string]bool)
+		for key := range project.Architect.Deploy.Configurations {
+			deployKeys[key] = true
+		}
+
+		// Check that all build configs exist in deploy configs
+		for buildKey := range buildKeys {
+			if !deployKeys[buildKey] {
+				return fmt.Errorf("build configuration %q does not have a matching deploy configuration", buildKey)
+			}
+		}
+
+		// Check that all deploy configs exist in build configs
+		for deployKey := range deployKeys {
+			if !buildKeys[deployKey] {
+				return fmt.Errorf("deploy configuration %q does not have a matching build configuration", deployKey)
+			}
+		}
+	}
+
+	return nil
 }

@@ -1,6 +1,15 @@
 # BUILD.bazel for {{.AppName}} frontend application
+# Self-contained app with its own config files and node_modules
 # Uses Angular CLI (ng build) via Bazel genrule
-# This allows Bazel to track dependencies while using the official Angular build system
+
+# Export config files for Bazel to track
+exports_files([
+    "angular.json",
+    "package.json",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.spec.json",
+])
 
 # Track all source files for dependency detection
 filegroup(
@@ -9,9 +18,25 @@ filegroup(
         [
             "src/**/*",
             "public/**/*",
-            "*.json",
         ],
         allow_empty = True,
+    ),
+    visibility = ["//visibility:public"],
+)
+
+# Track node_modules (exclude unnecessary files to speed up Bazel)
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        ["node_modules/**/*"],
+        exclude = [
+            "node_modules/**/*.md",
+            "node_modules/**/*.markdown",
+            "node_modules/**/test/**",
+            "node_modules/**/tests/**",
+            "node_modules/**/*.map",
+            "node_modules/**/.cache/**",
+        ],
     ),
     visibility = ["//visibility:public"],
 )
@@ -22,10 +47,12 @@ genrule(
     name = "ng_build",
     srcs = [
         ":sources",
-        "//frontend:angular_json",
-        "//frontend:package_json",
-        "//frontend:tsconfig_json",
-        "//frontend:node_modules",
+        "angular.json",
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.spec.json",
+        ":node_modules",
     ],
     outs = ["dist.tar.gz"],
     output_to_bindir = 1,
@@ -41,50 +68,45 @@ genrule(
         # Get environment from Bazel variable (defaults to production)
         ENV=$${ENV:-production}
         
-        # Create working directory structure
+        # Create working directory
         WORK_DIR=$$PWD/build_tmp
-        APP_DIR=$$WORK_DIR/frontend/apps/{{.AppName}}
-        mkdir -p $$APP_DIR
+        mkdir -p $$WORK_DIR
         
-        # Copy Angular workspace files
-        cp $(location //frontend:angular_json) $$WORK_DIR/frontend/angular.json
-        cp $(location //frontend:package_json) $$WORK_DIR/frontend/package.json
-        cp $(location //frontend:tsconfig_json) $$WORK_DIR/frontend/tsconfig.json
+        # Copy config files to working directory
+        cp $(location angular.json) $$WORK_DIR/angular.json
+        cp $(location package.json) $$WORK_DIR/package.json
+        cp $(location tsconfig.json) $$WORK_DIR/tsconfig.json
+        cp $(location tsconfig.app.json) $$WORK_DIR/tsconfig.app.json
+        cp $(location tsconfig.spec.json) $$WORK_DIR/tsconfig.spec.json
         
-        # Copy source files preserving directory structure
-        for src in $(SRCS); do
-            # Skip workspace files and node_modules
-            if [[ $$src == *"angular.json" ]] || [[ $$src == *"package.json" ]] || [[ $$src == *"tsconfig.json" ]] || [[ $$src == *"node_modules"* ]]; then
-                continue
-            fi
-            
-            # Extract relative path from "frontend/apps/{{.AppName}}/"
-            rel_path=$${src#frontend/apps/{{.AppName}}/}
-            
-            # Create parent directory if needed
-            target_dir=$$(dirname "$$APP_DIR/$$rel_path")
-            mkdir -p "$$target_dir"
-            
-            # Copy file or directory
-            if [ -d "$$src" ]; then
-                cp -r "$$src" "$$target_dir/"
-            else
-                cp "$$src" "$$target_dir/"
+        # Copy source files to working directory
+        mkdir -p $$WORK_DIR/src
+        for src in $(locations :sources); do
+            if [[ $$src == */src/* ]]; then
+                rel_path=$${src#*src/}
+                target_dir=$$(dirname "$$WORK_DIR/src/$$rel_path")
+                mkdir -p "$$target_dir"
+                cp "$$src" "$$WORK_DIR/src/$$rel_path"
+            elif [[ $$src == */public/* ]]; then
+                rel_path=$${src#*public/}
+                target_dir=$$(dirname "$$WORK_DIR/public/$$rel_path")
+                mkdir -p "$$target_dir"
+                cp "$$src" "$$WORK_DIR/public/$$rel_path"
             fi
         done
         
-        # Link node_modules - find the parent directory containing all node_modules files
-        NODE_MODULES_FILE=$$(echo "$(locations //frontend:node_modules)" | awk '{print $$1}')
-        # Get the node_modules directory (file is in node_modules/.bin/*, so dirname twice)
+        # Link node_modules to working directory
+        # Find first node_modules file to determine the directory
+        NODE_MODULES_FILE=$$(echo "$(locations :node_modules)" | awk '{print $$1}')
         NODE_MODULES_DIR=$$(dirname $$(dirname $$NODE_MODULES_FILE))
-        ln -sf $$(realpath $$NODE_MODULES_DIR) $$WORK_DIR/frontend/node_modules
+        ln -sf $$(realpath $$NODE_MODULES_DIR) $$WORK_DIR/node_modules
         
         # Run Angular build with environment-specific configuration
-        cd $$WORK_DIR/frontend
-        npx ng build {{.AppName}} --configuration=$$ENV --output-path=../../dist
+        cd $$WORK_DIR
+        npx ng build --configuration=$$ENV --output-path=dist
         
         # Create tar from output using absolute path from EXECROOT
-        cd $$PWD/../../dist
+        cd dist
         tar -czf $$EXECROOT/$@ .
     """,
     visibility = ["//visibility:public"],

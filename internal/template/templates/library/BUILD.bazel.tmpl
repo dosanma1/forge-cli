@@ -1,0 +1,31 @@
+load("@gazelle//:def.bzl", "gazelle")
+load("@rules_go//go:def.bzl", "go_library"{{if .HasTests}}, "go_test"{{end}})
+
+# Run this to auto-update BUILD files:
+# bazel run //:gazelle
+gazelle(name = "gazelle")
+
+# gazelle:prefix {{.ImportPath}}
+
+exports_files([
+    "go.mod",
+    "go.sum",
+])
+
+go_library(
+    name = "{{.PackageName}}",
+    srcs = [{{range .Files}}
+        "{{.}}",{{end}}
+    ],
+    importpath = "{{.ImportPath}}",
+    visibility = ["//visibility:public"],
+)
+{{if .HasTests}}
+go_test(
+    name = "{{.PackageName}}_test",
+    srcs = [{{range .TestFiles}}
+        "{{.}}",{{end}}
+    ],
+    embed = [":{{.PackageName}}"],
+)
+{{end}}
