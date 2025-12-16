@@ -4,7 +4,10 @@
 replicaCount: 1
 
 image:
-  repository: {{.Registry}}/{{.GitHubOrg}}/{{.WorkspaceName}}/{{.ServiceName}}
+  tag: "dev-latest"
+
+migrateImage:
+  enabled: false
   tag: "dev-latest"
 
 resources:
@@ -15,13 +18,9 @@ resources:
     cpu: 50m
     memory: 64Mi
 
-env:
-  - name: PORT
-    value: "8080"
-  - name: LOG_LEVEL
-    value: "debug"
-  - name: ENVIRONMENT
-    value: "development"
+configuration:
+  logLevel: "debug"
+  environment: "development"
 
 ingress:
   enabled: true
@@ -29,14 +28,20 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-staging"
   hosts:
-    - host: {{.ServiceName}}-dev.example.com
+    - host: {{.ServiceName}}-dev.{{if .Domain}}{{.Domain}}{{else}}{{ "{{" }} .Values.global.domain {{ "}}" }}{{end}}
       paths:
         - path: /
           pathType: Prefix
+          port: http
   tls:
     - secretName: {{.ServiceName}}-dev-tls
       hosts:
-        - {{.ServiceName}}-dev.example.com
+        - {{.ServiceName}}-dev.{{if .Domain}}{{.Domain}}{{else}}{{ "{{" }} .Values.global.domain {{ "}}" }}{{end}}
 
 autoscaling:
   enabled: false
+
+# Development-specific global overrides
+global:
+  registry: {{if .Registry}}{{.Registry}}{{else}}""{{end}}
+  domain: {{if .Domain}}{{.Domain}}{{else}}""{{end}}

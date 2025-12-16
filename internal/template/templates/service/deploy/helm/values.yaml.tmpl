@@ -4,19 +4,50 @@
 nameOverride: "{{.ServiceName}}"
 fullnameOverride: ""
 
+replicaCount: 1
+
 image:
-  repository: {{.Registry}}/{{.GitHubOrg}}/{{.WorkspaceName}}/{{.ServiceName}}
-  pullPolicy: IfNotPresent
-  tag: "latest"
+  repository: {{if .Registry}}{{.Registry}}{{else}}{{ "{{" }} .Values.global.registry {{ "}}" }}{{end}}/{{.ServiceName}}
+  pullPolicy: Always
+  tag: ""
+
+# Migration image configuration (runs database migrations before deployment)
+migrateImage:
+  enabled: false
+  repository: {{if .Registry}}{{.Registry}}{{else}}{{ "{{" }} .Values.global.registry {{ "}}" }}{{end}}/{{.ServiceName}}-migrate
+  pullPolicy: Always
+  tag: ""
+
+imagePullSecrets: []
 
 serviceAccount:
   create: true
   annotations: {}
+  name: ""
 
 service:
   type: ClusterIP
-  port: 80
-  targetPort: 8080
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+      protocol: TCP
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: {{.ServiceName}}.local
+      paths:
+        - path: /
+          pathType: Prefix
+          port: http
+  tls: []
 
 resources:
   limits:
@@ -26,25 +57,61 @@ resources:
     cpu: 100m
     memory: 128Mi
 
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
 livenessProbe:
   httpGet:
     path: /healthz
     port: http
-  initialDelaySeconds: 30
+  initialDelaySeconds: 1
   periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
 
 readinessProbe:
   httpGet:
     path: /healthz
     port: http
-  initialDelaySeconds: 10
+  initialDelaySeconds: 1
   periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
 
-env:
-  - name: PORT
-    value: "8080"
-  - name: LOG_LEVEL
-    value: "info"
+# Service-specific configuration
+configuration:
+  port: "8080"
+  grpcPort: "50051"
+  logLevel: "info"
+  # Add service-specific environment variables here
+
+# Global environment variables
+env: []
+  # - name: FEATURE_FLAG_X
+  #   value: "true"
+
+# Environment variables from ConfigMaps
+envFrom: []
+  # - configMapRef:
+  #     name: app-config
+
+# Environment variables from Secrets
+secrets: []
+  # - name: DATABASE_URL
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: postgres-credentials
+  #       key: url
+
+podAnnotations: {}
+
+podLabels: {}
 
 podSecurityContext:
   runAsNonRoot: true
@@ -57,3 +124,24 @@ securityContext:
     drop:
       - ALL
   readOnlyRootFilesystem: true
+
+# Persistent volumes
+volumes: []
+  # - name: data
+  #   persistentVolumeClaim:
+  #     claimName: app-data
+
+volumeMounts: []
+  # - name: data
+  #   mountPath: /data
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Global configuration (can be overridden per environment)
+global:
+  registry: ""
+  domain: ""

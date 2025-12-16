@@ -4,7 +4,10 @@
 replicaCount: 3
 
 image:
-  repository: {{.Registry}}/{{.GitHubOrg}}/{{.WorkspaceName}}/{{.ServiceName}}
+  tag: "prod-latest"
+
+migrateImage:
+  enabled: true
   tag: "prod-latest"
 
 resources:
@@ -15,13 +18,9 @@ resources:
     cpu: 200m
     memory: 256Mi
 
-env:
-  - name: PORT
-    value: "8080"
-  - name: LOG_LEVEL
-    value: "info"
-  - name: ENVIRONMENT
-    value: "production"
+configuration:
+  logLevel: "info"
+  environment: "production"
 
 ingress:
   enabled: true
@@ -29,14 +28,15 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts:
-    - host: {{.ServiceName}}.example.com
+    - host: {{.ServiceName}}.{{if .Domain}}{{.Domain}}{{else}}{{ "{{" }} .Values.global.domain {{ "}}" }}{{end}}
       paths:
         - path: /
           pathType: Prefix
+          port: http
   tls:
     - secretName: {{.ServiceName}}-prod-tls
       hosts:
-        - {{.ServiceName}}.example.com
+        - {{.ServiceName}}.{{if .Domain}}{{.Domain}}{{else}}{{ "{{" }} .Values.global.domain {{ "}}" }}{{end}}
 
 autoscaling:
   enabled: true
@@ -44,3 +44,8 @@ autoscaling:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
+
+# Production-specific global overrides
+global:
+  registry: {{if .Registry}}{{.Registry}}{{else}}""{{end}}
+  domain: {{if .Domain}}{{.Domain}}{{else}}""{{end}}
