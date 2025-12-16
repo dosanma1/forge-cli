@@ -114,9 +114,19 @@ func (s *Syncer) getGoModulePath() (string, error) {
 	// Try go.work first
 	workPath := filepath.Join(s.workspaceRoot, "go.work")
 	if _, err := os.Stat(workPath); err == nil {
-		// For workspaces, build import path from GitHub org + workspace name
+		// For workspaces, build import path from git provider org + workspace name
 		if s.config.Workspace.GitHub != nil && s.config.Workspace.GitHub.Org != "" {
-			return fmt.Sprintf("github.com/%s/%s", s.config.Workspace.GitHub.Org, s.config.Workspace.Name), nil
+			org := s.config.Workspace.GitHub.Org
+
+			// If org already contains domain (e.g., "github.com/dosanma1" or "gitlab.com/myorg")
+			// use it as-is. Otherwise, assume it's just the org name and prepend github.com
+			if strings.Contains(org, "/") {
+				// Full path provided (domain/org), just append workspace name
+				return fmt.Sprintf("%s/%s", org, s.config.Workspace.Name), nil
+			}
+
+			// Just org name provided, prepend github.com for backward compatibility
+			return fmt.Sprintf("github.com/%s/%s", org, s.config.Workspace.Name), nil
 		}
 	}
 

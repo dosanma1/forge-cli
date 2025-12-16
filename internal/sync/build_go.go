@@ -16,7 +16,8 @@ const goBuildRootTemplate = `load("@gazelle//:def.bzl", "gazelle")
 gazelle(name = "gazelle")
 
 # gazelle:prefix {{.ImportPath}}
-
+{{range .Modules}}# gazelle:resolve go {{.ImportPath}} //{{.Path}}
+{{end}}
 exports_files([
     "go.mod",
     "go.sum",
@@ -112,6 +113,13 @@ type GoBuildData struct {
 	Files       []string
 	TestFiles   []string
 	HasTests    bool
+	Modules     []WorkspaceModule
+}
+
+// WorkspaceModule represents a Go module in the workspace
+type WorkspaceModule struct {
+	ImportPath string
+	Path       string
 }
 
 // GenerateGoBuild creates BUILD.bazel content for a Go package.
@@ -130,8 +138,21 @@ func (s *Syncer) GenerateGoBuild(pkg *GoPackage) (string, error) {
 			return "", fmt.Errorf("failed to parse template: %w", err)
 		}
 
+		// Parse go.work to get workspace modules
+		modules, err := s.getWorkspaceModules()
+		if err != nil {
+			fmt.Printf("⚠️  Failed to parse workspace modules: %v\n", err)
+			modules = []WorkspaceModule{} // Continue without modules
+		}
+
 		var buf bytes.Buffer
-		data := struct{ ImportPath string }{ImportPath: pkg.ImportPath}
+		data := struct {
+			ImportPath string
+			Modules    []WorkspaceModule
+		}{
+			ImportPath: pkg.ImportPath,
+			Modules:    modules,
+		}
 		if err := tmpl.Execute(&buf, data); err != nil {
 			return "", fmt.Errorf("failed to execute template: %w", err)
 		}
@@ -266,4 +287,66 @@ func (s *Syncer) syncGoBuildFiles(report *SyncReport) error {
 	}
 
 	return nil
+}
+
+// getWorkspaceModules parses go.work to find all workspace modules
+func (s *Syncer) getWorkspaceModules() ([]WorkspaceModule, error) {
+	goWorkPath := filepath.Join(s.workspaceRoot, "go.work")
+	content, err := os.ReadFile(goWorkPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read go.work: %w", err)
+	}
+
+	var modules []WorkspaceModule
+	lines := strings.Split(string(content), "\n")
+	inUseBlock := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Check for use block start
+		if strings.HasPrefix(line, "use (") {
+			inUseBlock = true
+			continue
+		}
+
+		// Check for use block end
+		if inUseBlock && line == ")" {
+			inUseBlock = false
+			continue
+		}
+
+		// Parse use directive (either in block or standalone)
+		var modulePath string
+		if inUseBlock {
+			modulePath = strings.Trim(line, `"`)
+		} else if strings.HasPrefix(line, "use ") {
+			// Remove "use " prefix and quotes
+			modulePath = strings.TrimPrefix(line, "use ")
+			modulePath = strings.Trim(modulePath, `"`)
+		}
+
+		if modulePath != "" && modulePath != "." {
+			// Read go.mod to get the module import path
+			goModPath := filepath.Join(s.workspaceRoot, modulePath, "go.mod")
+			goModContent, err := os.ReadFile(goModPath)
+			if err != nil {
+				continue // Skip if can't read go.mod
+			}
+
+			// Extract module path from go.mod
+			for _, goModLine := range strings.Split(string(goModContent), "\n") {
+				if strings.HasPrefix(goModLine, "module ") {
+					importPath := strings.TrimSpace(strings.TrimPrefix(goModLine, "module "))
+					modules = append(modules, WorkspaceModule{
+						ImportPath: importPath,
+						Path:       modulePath,
+					})
+					break
+				}
+			}
+		}
+	}
+
+	return modules, nil
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/template"
 	"github.com/dosanma1/forge-cli/internal/workspace"
@@ -68,7 +69,15 @@ func (s *Syncer) Sync() (*SyncReport, error) {
 		return report, fmt.Errorf("failed to sync BUILD files: %w", err)
 	}
 
-	// Step 4: Run gazelle to resolve Go dependencies
+	// Step 4: Run bazel mod tidy to populate use_repo declarations
+	if contains(languages, "go") && !s.dryRun {
+		if err := s.runBazelModTidy(); err != nil {
+			fmt.Printf("⚠️  bazel mod tidy failed: %v\n", err)
+			// Don't fail the sync, continue to gazelle
+		}
+	}
+
+	// Step 5: Run gazelle to resolve Go dependencies
 	if contains(languages, "go") && !s.dryRun {
 		fmt.Println("🔄 Running gazelle to resolve dependencies...")
 		if err := s.runGazelle(); err != nil {
@@ -198,7 +207,20 @@ func (s *Syncer) syncBuildFiles(report *SyncReport) error {
 
 // runGazelle executes bazel run //:gazelle to resolve Go dependencies
 func (s *Syncer) runGazelle() error {
-	cmd := exec.Command("bazel", "run", "//:gazelle")
+	// Get workspace modules to pass as -known_import flags
+	modules, err := s.getWorkspaceModulesForGazelle()
+	if err != nil {
+		fmt.Printf("⚠️  Failed to get workspace modules: %v\n", err)
+	}
+
+	args := []string{"run", "//:gazelle", "--", "-go_repository_mode"}
+
+	// Add -known_import flag for each workspace module to prevent external lookups
+	for _, mod := range modules {
+		args = append(args, "-known_import="+mod)
+	}
+
+	cmd := exec.Command("bazel", args...)
 	cmd.Dir = s.workspaceRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -208,4 +230,57 @@ func (s *Syncer) runGazelle() error {
 	}
 
 	return nil
+}
+
+// getWorkspaceModulesForGazelle returns all workspace module import paths
+func (s *Syncer) getWorkspaceModulesForGazelle() ([]string, error) {
+	goWorkPath := filepath.Join(s.workspaceRoot, "go.work")
+	content, err := os.ReadFile(goWorkPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read go.work: %w", err)
+	}
+
+	var modules []string
+	lines := strings.Split(string(content), "\n")
+	inUseBlock := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		if strings.HasPrefix(line, "use (") {
+			inUseBlock = true
+			continue
+		}
+
+		if inUseBlock && line == ")" {
+			inUseBlock = false
+			continue
+		}
+
+		var modulePath string
+		if inUseBlock {
+			modulePath = strings.Trim(line, `"`)
+		} else if strings.HasPrefix(line, "use ") {
+			modulePath = strings.TrimPrefix(line, "use ")
+			modulePath = strings.Trim(modulePath, `"`)
+		}
+
+		if modulePath != "" && modulePath != "." {
+			goModPath := filepath.Join(s.workspaceRoot, modulePath, "go.mod")
+			goModContent, err := os.ReadFile(goModPath)
+			if err != nil {
+				continue
+			}
+
+			for _, goModLine := range strings.Split(string(goModContent), "\n") {
+				if strings.HasPrefix(goModLine, "module ") {
+					importPath := strings.TrimSpace(strings.TrimPrefix(goModLine, "module "))
+					modules = append(modules, importPath)
+					break
+				}
+			}
+		}
+	}
+
+	return modules, nil
 }

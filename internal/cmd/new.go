@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/generator"
 	"github.com/dosanma1/forge-cli/internal/ui"
@@ -36,7 +38,7 @@ Examples:
 func init() {
 	rootCmd.AddCommand(newCmd)
 
-	newCmd.Flags().StringVar(&newGitHubOrg, "github-org", "", "GitHub organization (e.g., mycompany)")
+	newCmd.Flags().StringVar(&newGitHubOrg, "github-org", "", "Organization/username (e.g., mycompany)")
 	newCmd.Flags().StringVar(&newDockerRegistry, "docker-registry", "", "Docker registry (e.g., gcr.io/mycompany)")
 	newCmd.Flags().StringVar(&newGCPProjectID, "gcp-project", "", "GCP project ID")
 	newCmd.Flags().StringVar(&newK8sNamespace, "k8s-namespace", "", "Kubernetes namespace")
@@ -65,6 +67,23 @@ func runNew(cmd *cobra.Command, args []string) error {
 
 	// Collect initial values from flags
 	githubOrg := newGitHubOrg
+
+	// If github-org not provided, try to get it from git config
+	if githubOrg == "" {
+		if org, err := getOrgFromGit(); err == nil && org != "" {
+			githubOrg = org
+		}
+	}
+
+	// If still not set, prompt for it
+	if githubOrg == "" {
+		githubOrg, err = prompter.AskText("Organization/username (e.g., mycompany, myuser)", "")
+		if err != nil {
+			fmt.Println("Workspace creation cancelled.")
+			return nil
+		}
+	}
+
 	dockerRegistry := newDockerRegistry
 	gcpProjectId := newGCPProjectID
 	k8sNamespace := newK8sNamespace
@@ -339,4 +358,38 @@ func runNew(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  $ forge build\n")
 
 	return nil
+}
+
+// getOrgFromGit tries to get the organization/username from git config.
+// This could be for GitHub, GitLab, Bitbucket, or any git hosting provider.
+func getOrgFromGit() (string, error) {
+	// Try github.user first (common convention)
+	cmd := exec.Command("git", "config", "--get", "github.user")
+	if output, err := cmd.Output(); err == nil {
+		org := strings.TrimSpace(string(output))
+		if org != "" && !strings.Contains(org, " ") {
+			return org, nil
+		}
+	}
+
+	// Try gitlab.user
+	cmd = exec.Command("git", "config", "--get", "gitlab.user")
+	if output, err := cmd.Output(); err == nil {
+		org := strings.TrimSpace(string(output))
+		if org != "" && !strings.Contains(org, " ") {
+			return org, nil
+		}
+	}
+
+	// Fallback to user.name, but only if it's username-like (no spaces)
+	cmd = exec.Command("git", "config", "--get", "user.name")
+	if output, err := cmd.Output(); err == nil {
+		username := strings.TrimSpace(string(output))
+		// Only return if it doesn't contain spaces (likely a username, not a full name)
+		if username != "" && !strings.Contains(username, " ") {
+			return username, nil
+		}
+	}
+
+	return "", fmt.Errorf("no git config found")
 }

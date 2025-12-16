@@ -608,15 +608,52 @@ func addToGoWorkspace(workspacePath, modulePath string) error {
 		return nil
 	}
 
-	// Add new use directive before the closing parenthesis or after "use ("
-	if strings.Contains(workContent, "use (") {
-		workContent = strings.Replace(workContent, "use (", fmt.Sprintf("use (\n\t./%s", relPath), 1)
-	} else if strings.Contains(workContent, "use") {
-		workContent = strings.Replace(workContent, ")", fmt.Sprintf("\t./%s\n)", relPath), 1)
-	} else {
-		workContent += fmt.Sprintf("\n\nuse (\n\t./%s\n)\n", relPath)
+	// Add new use directive
+	lines := strings.Split(workContent, "\n")
+	var newLines []string
+	inUseBlock := false
+	added := false
+
+	for i, line := range lines {
+		newLines = append(newLines, line)
+
+		// Check if we're entering a use block
+		if strings.HasPrefix(strings.TrimSpace(line), "use (") {
+			inUseBlock = true
+			continue
+		}
+
+		// Check for inline use directive
+		if !inUseBlock && strings.HasPrefix(strings.TrimSpace(line), "use ") {
+			// Insert after the last standalone use directive
+			if i+1 < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i+1]), "use ") {
+				newLines = append(newLines, fmt.Sprintf("\nuse ./%s", relPath))
+				added = true
+			}
+			continue
+		}
+
+		// If we're in a use block and hit the closing paren, add before it
+		if inUseBlock && strings.TrimSpace(line) == ")" {
+			// Insert before the closing paren
+			newLines = newLines[:len(newLines)-1] // Remove the ")" we just added
+			newLines = append(newLines, "")
+			newLines = append(newLines, fmt.Sprintf("use ./%s", relPath))
+			newLines = append(newLines, ")")
+			added = true
+			inUseBlock = false
+		}
 	}
 
+	// If not added and no use block exists, create one
+	if !added {
+		newLines = append(newLines, "")
+		newLines = append(newLines, "use (")
+		newLines = append(newLines, fmt.Sprintf("\t./%s", relPath))
+		newLines = append(newLines, ")")
+	}
+
+	workContent = strings.Join(newLines, "\n")
 	return os.WriteFile(workspacePath, []byte(workContent), 0644)
 }
 
@@ -696,7 +733,7 @@ func registerLibraryInForgeConfig(libPath, importPath string) error {
 			Build: &workspace.ArchitectTarget{
 				Builder: "@forge/bazel:build",
 				Options: map[string]interface{}{
-					"target": fmt.Sprintf(":%s", libName),
+					"target": "/...",
 				},
 				Configurations: map[string]interface{}{
 					"production": map[string]interface{}{},

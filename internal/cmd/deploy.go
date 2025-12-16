@@ -46,7 +46,7 @@ func init() {
 	deployCmd.Flags().BoolVarP(&deployVerbose, "verbose", "v", false, "Show verbose output")
 	deployCmd.Flags().BoolVarP(&deployTail, "tail", "t", false, "Stream logs after deployment")
 	deployCmd.Flags().BoolVar(&deploySkipBuild, "skip-build", false, "Skip build phase")
-	deployCmd.Flags().StringVar(&deployPlatform, "platform", "linux/amd64", "Target platform for builds")
+	deployCmd.Flags().StringVar(&deployPlatform, "platform", "", "Target platform for builds (empty = native platform)")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {

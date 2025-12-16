@@ -128,6 +128,9 @@ func getPlatformArgs(platform string) []string {
 		return []string{"--platforms=@rules_go//go/toolchain:darwin_amd64"}
 	case "darwin/arm64":
 		return []string{"--platforms=@rules_go//go/toolchain:darwin_arm64"}
+	case "":
+		// Empty platform means use native/host platform
+		return []string{"--platforms=@local_config_platform//:host"}
 	default:
 		return []string{"--platforms=@rules_go//go/toolchain:linux_amd64"}
 	}

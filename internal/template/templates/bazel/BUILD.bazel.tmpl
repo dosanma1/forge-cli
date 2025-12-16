@@ -6,7 +6,7 @@
 package(default_visibility = ["//visibility:public"])
 
 # Gazelle configuration for Go
-# gazelle:prefix {{.GitHubOrg}}/{{.ProjectName}}
+# gazelle:prefix github.com/{{.GitHubOrg}}/{{.ProjectName}}
 gazelle(name = "gazelle")
 
 gazelle(

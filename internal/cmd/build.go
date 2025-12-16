@@ -45,7 +45,7 @@ func init() {
 	buildCmd.Flags().BoolVarP(&buildVerbose, "verbose", "v", false, "Show detailed build output")
 	buildCmd.Flags().StringVarP(&buildEnv, "env", "e", "", "Build environment/profile (local, development, production)")
 	buildCmd.Flags().BoolVar(&buildPush, "push", false, "Build and push Docker images to registry")
-	buildCmd.Flags().StringVar(&buildPlatform, "platform", "linux/amd64", "Target platform for builds")
+	buildCmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform for builds (empty = native platform)")
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {

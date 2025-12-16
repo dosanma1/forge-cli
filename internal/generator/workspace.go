@@ -71,7 +71,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 	// Backend services are in backend/services/<service>/
 	config.Workspace.ToolVersions = &workspace.ToolVersions{
 		Angular: "21.0.2",
-		Go:      "1.23.4",
+		Go:      "1.24.0",
 		NestJS:  "10.4.9",
 		Node:    "24.11.1",
 		Bazel:   "7.4.1",
@@ -371,7 +371,7 @@ func (g *WorkspaceGenerator) generateBazelFilesWithOrg(workspaceDir, workspaceNa
 	data := map[string]interface{}{
 		"ProjectName":    workspaceName,
 		"Version":        "0.1.0",
-		"GoVersion":      "1.23.4",
+		"GoVersion":      "1.24.0",
 		"NodeVersion":    "24.11.1",
 		"AngularVersion": "21.0.2",
 		"NestJSVersion":  "11.1.9",

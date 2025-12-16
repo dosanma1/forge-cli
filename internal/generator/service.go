@@ -257,7 +257,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 			Build: &workspace.ArchitectTarget{
 				Builder: "@forge/bazel:build",
 				Options: map[string]interface{}{
-					"target":     "/cmd/server:image_tarball.tar",
+					"target":     "/cmd/server:server",
 					"goVersion":  config.Workspace.ToolVersions.Go,
 					"registry":   dockerRegistry,
 					"dockerfile": "Dockerfile",
