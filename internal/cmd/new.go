@@ -98,9 +98,70 @@ func runNew(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
+		// Prompt for deployer selection
+		deployerChoice, err := prompter.AskSelect("Which deployment target would you like to use?", []string{"Helm (Kubernetes)", "CloudRun"})
+		if err != nil {
+			fmt.Println("Workspace creation cancelled.")
+			return nil
+		}
+
+		// Map display names to internal names
+		var deployer string
+		switch deployerChoice {
+		case "Helm (Kubernetes)":
+			deployer = "helm"
+		case "CloudRun":
+			deployer = "cloudrun"
+		default:
+			deployer = "helm"
+		}
+
+		// Prompt for deployer-specific configuration
+		deployerConfig := make(map[string]string)
+		switch deployer {
+		case "helm":
+			namespace, err := prompter.AskText("Kubernetes namespace", "default")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["namespace"] = namespace
+
+			port, err := prompter.AskText("Service port", "8080")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["port"] = port
+
+			healthPath, err := prompter.AskText("Health check path", "/health")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["healthPath"] = healthPath
+
+		case "cloudrun":
+			region, err := prompter.AskText("Cloud Run region", "us-central1")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["region"] = region
+
+			memory, err := prompter.AskText("Memory limit", "512Mi")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["memory"] = memory
+		}
+
 		service := map[string]interface{}{
-			"Name": serviceName,
-			"Type": serviceType,
+			"Name":           serviceName,
+			"Type":           serviceType,
+			"Deployer":       deployer,
+			"DeployerConfig": deployerConfig,
 		}
 		servicesData = append(servicesData, service)
 	}
@@ -132,16 +193,81 @@ func runNew(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
-		deployment, err := prompter.AskSelect("Which deployment target would you like to use?", []string{"Firebase", "CloudRun", "GKE"})
+		deployerChoice, err := prompter.AskSelect("Which deployment target would you like to use?", []string{"Firebase", "Helm (Kubernetes)", "CloudRun"})
 		if err != nil {
 			fmt.Println("Workspace creation cancelled.")
 			return nil
 		}
 
+		// Map display names to internal names
+		var deployer string
+		switch deployerChoice {
+		case "Firebase":
+			deployer = "firebase"
+		case "Helm (Kubernetes)":
+			deployer = "helm"
+		case "CloudRun":
+			deployer = "cloudrun"
+		default:
+			deployer = "firebase"
+		}
+
+		// Prompt for deployer-specific configuration
+		deployerConfig := make(map[string]string)
+		switch deployer {
+		case "firebase":
+			projectId, err := prompter.AskText("Firebase project ID", "")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["projectId"] = projectId
+
+			site, err := prompter.AskText("Firebase hosting site (optional)", "")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			if site != "" {
+				deployerConfig["site"] = site
+			}
+
+		case "helm":
+			namespace, err := prompter.AskText("Kubernetes namespace", "default")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["namespace"] = namespace
+
+			port, err := prompter.AskText("Service port", "4200")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["port"] = port
+
+		case "cloudrun":
+			region, err := prompter.AskText("Cloud Run region", "us-central1")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["region"] = region
+
+			memory, err := prompter.AskText("Memory limit", "512Mi")
+			if err != nil {
+				fmt.Println("Workspace creation cancelled.")
+				return nil
+			}
+			deployerConfig["memory"] = memory
+		}
+
 		frontend := map[string]interface{}{
-			"Name":       appName,
-			"Type":       appType,
-			"Deployment": deployment,
+			"Name":           appName,
+			"Type":           appType,
+			"Deployment":     deployer,
+			"DeployerConfig": deployerConfig,
 		}
 		frontendsData = append(frontendsData, frontend)
 	}
@@ -160,7 +286,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		fmt.Println("  Backend Services:")
 		for _, svc := range servicesData {
 			svcMap := svc.(map[string]interface{})
-			fmt.Printf("    - %s (%s)\n", svcMap["Name"], svcMap["Type"])
+			fmt.Printf("    - %s (%s, %s)\n", svcMap["Name"], svcMap["Type"], svcMap["Deployer"])
 		}
 	}
 

@@ -198,39 +198,52 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		}
 	}
 
-	// Generate Helm values files
-	helmTemplates := map[string]string{
-		"deploy/helm/values.yaml":      "service/deploy/helm/values.yaml.tmpl",
-		"deploy/helm/values-dev.yaml":  "service/deploy/helm/values-dev.yaml.tmpl",
-		"deploy/helm/values-prod.yaml": "service/deploy/helm/values-prod.yaml.tmpl",
-	}
-
-	for filename, templatePath := range helmTemplates {
-		content, err := g.engine.RenderTemplate(templatePath, data)
-		if err != nil {
-			return fmt.Errorf("failed to render %s: %w", filename, err)
-		}
-
-		filePath := filepath.Join(serviceDir, filename)
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
+	// Get deployer from opts.Data or default to helm
+	deployerTarget := "helm"
+	if opts.Data != nil {
+		if deployer, ok := opts.Data["deployer"].(string); ok && deployer != "" {
+			deployerTarget = deployer
 		}
 	}
 
-	// Generate Cloud Run deployment file
-	cloudRunTemplate := map[string]string{
-		"deploy/cloudrun/service.yaml": "service/deploy/cloudrun/service.yaml.tmpl",
-	}
-
-	for filename, templatePath := range cloudRunTemplate {
-		content, err := g.engine.RenderTemplate(templatePath, data)
-		if err != nil {
-			return fmt.Errorf("failed to render %s: %w", filename, err)
+	// Generate deployment files based on selected deployer
+	switch deployerTarget {
+	case "helm":
+		// Generate Helm values files
+		helmTemplates := map[string]string{
+			"deploy/helm/values.yaml":      "service/deploy/helm/values.yaml.tmpl",
+			"deploy/helm/values-dev.yaml":  "service/deploy/helm/values-dev.yaml.tmpl",
+			"deploy/helm/values-prod.yaml": "service/deploy/helm/values-prod.yaml.tmpl",
 		}
 
-		filePath := filepath.Join(serviceDir, filename)
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-			return fmt.Errorf("failed to write %s: %w", filename, err)
+		for filename, templatePath := range helmTemplates {
+			content, err := g.engine.RenderTemplate(templatePath, data)
+			if err != nil {
+				return fmt.Errorf("failed to render %s: %w", filename, err)
+			}
+
+			filePath := filepath.Join(serviceDir, filename)
+			if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+				return fmt.Errorf("failed to write %s: %w", filename, err)
+			}
+		}
+
+	case "cloudrun":
+		// Generate Cloud Run deployment file
+		cloudRunTemplate := map[string]string{
+			"deploy/cloudrun/service.yaml": "service/deploy/cloudrun/service.yaml.tmpl",
+		}
+
+		for filename, templatePath := range cloudRunTemplate {
+			content, err := g.engine.RenderTemplate(templatePath, data)
+			if err != nil {
+				return fmt.Errorf("failed to render %s: %w", filename, err)
+			}
+
+			filePath := filepath.Join(serviceDir, filename)
+			if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+				return fmt.Errorf("failed to write %s: %w", filename, err)
+			}
 		}
 	}
 
@@ -262,9 +275,9 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 				DefaultConfiguration: "production",
 			},
 			Deploy: &workspace.ArchitectTarget{
-				Deployer: "@forge/helm:deploy",
+				Deployer: fmt.Sprintf("@forge/%s:deploy", deployerTarget),
 				Options: map[string]interface{}{
-					"configPath": "deploy/helm",
+					"configPath": fmt.Sprintf("deploy/%s", deployerTarget),
 					"namespace":  "default",
 					"port":       8080,
 					"healthPath": "/health",
@@ -285,7 +298,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		},
 		Metadata: map[string]interface{}{
 			"deployment": map[string]interface{}{
-				"target": "helm",
+				"target": deployerTarget,
 			},
 		},
 	}

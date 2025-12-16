@@ -29,7 +29,7 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.21.2")
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
     name = "distroless_base",
-    digest = "sha256:ccaef5ee2f1850270d453fdf700a5392534f8d1a8ca2acda391fbb6a06b81c86",
+    digest = "sha256:f5a3067027c2b322cd71b844f3d84ad3deada45ceb8a30f301260a602455070e",
     image = "gcr.io/distroless/base",
     platforms = [
         "linux/amd64",
@@ -39,16 +39,29 @@ oci.pull(
 {{if .HasFrontend}}
 oci.pull(
     name = "distroless_nodejs",
-    digest = "sha256:6893c8fa5c9d9c999566d0697c66ce23b5f86e6bb72679a9498bad57e23dfcb0",
+    digest = "sha256:b25d2acae94fcf57d27f3ac29135ecdce9c0be1e8585ef52262f0dde6b36ce72",
     image = "gcr.io/distroless/nodejs22-debian12",
     platforms = [
         "linux/amd64",
         "linux/arm64",
     ],
 )
-use_repo(oci, "distroless_base", "distroless_nodejs")
+use_repo(
+    oci,
+    "distroless_base",
+    "distroless_base_linux_amd64",
+    "distroless_base_linux_arm64",
+    "distroless_nodejs",
+    "distroless_nodejs_linux_amd64",
+    "distroless_nodejs_linux_arm64",
+)
 {{else}}
-use_repo(oci, "distroless_base")
+use_repo(
+    oci,
+    "distroless_base",
+    "distroless_base_linux_amd64",
+    "distroless_base_linux_arm64",
+)
 {{end}}
 
 # Go toolchain setup

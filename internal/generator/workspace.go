@@ -72,7 +72,7 @@ func (g *WorkspaceGenerator) Generate(ctx context.Context, opts GeneratorOptions
 	config.Workspace.ToolVersions = &workspace.ToolVersions{
 		Angular: "21.0.2",
 		Go:      "1.23.4",
-		NestJS:  "11.1.9",
+		NestJS:  "10.4.9",
 		Node:    "24.11.1",
 		Bazel:   "7.4.1",
 	}
@@ -223,8 +223,9 @@ Thumbs.db
 	// Note: forge.json is now the single source of truth (already created above)
 	// No need for separate .forge.yaml file
 
-	// Generate GitHub Actions workflows
-	if err := g.generateGitHubWorkflows(workspaceDir); err != nil {
+	// Generate GitHub Actions workflows using the new workflow generator
+	workflowGen := NewWorkflowGenerator(config, workspaceDir)
+	if err := workflowGen.UpdateWorkflows(); err != nil {
 		return fmt.Errorf("failed to generate GitHub workflows: %w", err)
 	}
 
@@ -235,8 +236,9 @@ Thumbs.db
 				svc := svcData.(map[string]interface{})
 				serviceName := svc["Name"].(string)
 				serviceType := svc["Type"].(string)
+				deployer := svc["Deployer"].(string)
 
-				fmt.Printf("\n🚀 Generating %s service: %s\n", serviceType, serviceName)
+				fmt.Printf("\n🚀 Generating %s service: %s (→ %s)\n", serviceType, serviceName, deployer)
 
 				var serviceGen Generator
 				if serviceType == "NestJS" {
@@ -245,9 +247,22 @@ Thumbs.db
 					serviceGen = NewServiceGenerator()
 				}
 
+				// Prepare data with deployer information
+				data := map[string]interface{}{
+					"deployer": deployer,
+				}
+
+				// Add deployer config if present
+				if deployerConfig, ok := svc["DeployerConfig"].(map[string]string); ok {
+					for k, v := range deployerConfig {
+						data[k] = v
+					}
+				}
+
 				serviceOpts := GeneratorOptions{
 					OutputDir: workspaceDir,
 					Name:      serviceName,
+					Data:      data,
 					DryRun:    false,
 				}
 
@@ -283,14 +298,24 @@ Thumbs.db
 
 					hasFrontend = true
 
+					// Prepare data with deployer information
+					data := map[string]interface{}{
+						"deployment": deployment,
+					}
+
+					// Add deployer config if present
+					if deployerConfig, ok := frontend["DeployerConfig"].(map[string]string); ok {
+						for k, v := range deployerConfig {
+							data[k] = v
+						}
+					}
+
 					frontendGen := NewFrontendGenerator()
 					frontendOpts := GeneratorOptions{
 						OutputDir: workspaceDir,
 						Name:      frontendName,
-						Data: map[string]interface{}{
-							"deployment": deployment,
-						},
-						DryRun: false,
+						Data:      data,
+						DryRun:    false,
 					}
 
 					if err := frontendGen.Generate(ctx, frontendOpts); err != nil {

@@ -226,6 +226,23 @@ func runGenerateService(cmd *cobra.Command, args []string) error {
 	// Normalize language
 	serviceLanguage = strings.ToLower(serviceLanguage)
 
+	// Prompt for deployer selection
+	_, deployerChoice, err := ui.AskSelect("Select deployment target:", []string{"Helm (Kubernetes)", "CloudRun"})
+	if err != nil {
+		return fmt.Errorf("cancelled: %w", err)
+	}
+
+	// Map display names to internal names
+	var deployer string
+	switch deployerChoice {
+	case "Helm (Kubernetes)":
+		deployer = "helm"
+	case "CloudRun":
+		deployer = "cloudrun"
+	default:
+		deployer = "helm"
+	}
+
 	// Create appropriate generator
 	var gen generator.Generator
 	switch serviceLanguage {
@@ -237,11 +254,14 @@ func runGenerateService(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unsupported service language: %s (supported: go, nestjs)", serviceLanguage)
 	}
 
-	// Prepare options
+	// Prepare options with deployer data
 	opts := generator.GeneratorOptions{
 		OutputDir: ".",
 		Name:      serviceName,
 		DryRun:    false,
+		Data: map[string]interface{}{
+			"deployer": deployer,
+		},
 	}
 
 	// Generate service
@@ -279,6 +299,25 @@ func runGenerateApp(cmd *cobra.Command, args []string) error {
 	// Normalize language
 	appLanguage = strings.ToLower(appLanguage)
 
+	// Prompt for deployer selection
+	_, deployerChoice, err := ui.AskSelect("Select deployment target:", []string{"Firebase", "Helm (Kubernetes)", "CloudRun"})
+	if err != nil {
+		return fmt.Errorf("cancelled: %w", err)
+	}
+
+	// Map display names to internal names
+	var deployer string
+	switch deployerChoice {
+	case "Firebase":
+		deployer = "firebase"
+	case "Helm (Kubernetes)":
+		deployer = "helm"
+	case "CloudRun":
+		deployer = "cloudrun"
+	default:
+		deployer = "firebase"
+	}
+
 	// Create appropriate generator
 	var gen generator.Generator
 	switch appLanguage {
@@ -290,11 +329,14 @@ func runGenerateApp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unsupported app framework: %s (supported: angular, react)", appLanguage)
 	}
 
-	// Prepare options
+	// Prepare options with deployer data
 	opts := generator.GeneratorOptions{
 		OutputDir: ".",
 		Name:      appName,
 		DryRun:    false,
+		Data: map[string]interface{}{
+			"deployer": deployer,
+		},
 	}
 
 	// Generate app

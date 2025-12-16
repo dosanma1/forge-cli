@@ -130,15 +130,18 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		return fmt.Errorf("failed to install @nestjs/terminus: %w", err)
 	}
 
-	// Create deploy directories
-	deployDirs := []string{
-		filepath.Join(serviceDir, "deploy", "helm"),
-		filepath.Join(serviceDir, "deploy", "cloudrun"),
-	}
-	for _, dir := range deployDirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	// Get deployer from opts.Data or default to helm
+	deployerTarget := "helm"
+	if opts.Data != nil {
+		if deployer, ok := opts.Data["deployer"].(string); ok && deployer != "" {
+			deployerTarget = deployer
 		}
+	}
+
+	// Create deploy directory for selected deployer only
+	deployDir := filepath.Join(serviceDir, "deploy", deployerTarget)
+	if err := os.MkdirAll(deployDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", deployDir, err)
 	}
 
 	// Generate Forge-specific files from templates
@@ -149,12 +152,19 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 		"ServicesPath":  servicesPath,
 	}
 
+	// Base files that are always generated
 	forgeFiles := map[string]string{
 		"BUILD.bazel":                     "BUILD.bazel.tmpl",
 		"Dockerfile":                      "Dockerfile.tmpl",
 		"src/health/health.controller.ts": "src/health/health.controller.ts.tmpl",
-		"deploy/helm/values.yaml":         "deploy/helm/values.yaml.tmpl",
-		"deploy/cloudrun/service.yaml":    "deploy/cloudrun/service.yaml.tmpl",
+	}
+
+	// Add deployer-specific files
+	switch deployerTarget {
+	case "helm":
+		forgeFiles["deploy/helm/values.yaml"] = "deploy/helm/values.yaml.tmpl"
+	case "cloudrun":
+		forgeFiles["deploy/cloudrun/service.yaml"] = "deploy/cloudrun/service.yaml.tmpl"
 	}
 
 	for outputPath, templatePath := range forgeFiles {
@@ -219,9 +229,9 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 				},
 			},
 			Deploy: &workspace.ArchitectTarget{
-				Deployer: "@forge/helm:deploy",
+				Deployer: fmt.Sprintf("@forge/%s:deploy", deployerTarget),
 				Options: map[string]interface{}{
-					"configPath": "deploy/helm",
+					"configPath": fmt.Sprintf("deploy/%s", deployerTarget),
 					"healthPath": "/health",
 					"namespace":  "default",
 					"port":       3000,
@@ -238,6 +248,11 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 					},
 				},
 				DefaultConfiguration: "production",
+			},
+		},
+		Metadata: map[string]interface{}{
+			"deployment": map[string]interface{}{
+				"target": deployerTarget,
 			},
 		},
 	}
@@ -262,7 +277,7 @@ func (g *NestJSServiceGenerator) Generate(ctx context.Context, opts GeneratorOpt
 
 // runNestJSCLI executes NestJS CLI commands
 func (g *NestJSServiceGenerator) runNestJSCLI(workDir string, config *workspace.Config, args []string) error {
-	nestjsVersion := "11.1.9" // default
+	nestjsVersion := "10.4.9" // default
 	if config.Workspace.ToolVersions != nil && config.Workspace.ToolVersions.NestJS != "" {
 		nestjsVersion = config.Workspace.ToolVersions.NestJS
 	}
