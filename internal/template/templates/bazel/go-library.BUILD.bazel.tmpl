@@ -1,5 +1,11 @@
 load("@rules_go//go:def.bzl", "go_library"{{if .HasTests}}, "go_test"{{end}})
-
+{{if .HasMigrations}}
+filegroup(
+    name = "migrations",
+    srcs = glob(["migrations/**/*.sql"]),
+    visibility = ["//visibility:public"],
+)
+{{end}}
 go_library(
     name = "{{.PackageName}}",
     srcs = [{{range .Files}}
@@ -13,7 +19,10 @@ go_test(
     name = "{{.PackageName}}_test",
     srcs = [{{range .TestFiles}}
         "{{.}}",{{end}}
-    ],
+    ],{{if .TestDataDeps}}
+    data = [{{range .TestDataDeps}}
+        "{{.}}",{{end}}
+    ],{{end}}
     embed = [":{{.PackageName}}"],
 )
 {{end}}

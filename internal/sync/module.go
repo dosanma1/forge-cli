@@ -70,25 +70,25 @@ func (s *Syncer) GenerateModuleBazel(languages []string) (string, error) {
 	hasFrontend := contains(languages, "nestjs") || contains(languages, "angular") || contains(languages, "react")
 
 	data := struct {
-		ProjectName      string
-		Version          string
-		HasGo            bool
-		HasJS            bool
-		HasFrontend      bool
-		WorkspaceRepo    string
-		GoVersion        string
-		GoModules        []string
-		GoDependencies   []string
+		ProjectName    string
+		Version        string
+		HasGo          bool
+		HasJS          bool
+		HasFrontend    bool
+		WorkspaceRepo  string
+		GoVersion      string
+		GoModules      []string
+		GoDependencies []string
 	}{
-		ProjectName:      s.config.Workspace.Name,
-		Version:          "0.1.0",
-		HasGo:            contains(languages, "go"),
-		HasJS:            hasFrontend,
-		HasFrontend:      hasFrontend,
-		WorkspaceRepo:    repoName,
-		GoVersion:        goVersion,
-		GoModules:        goModules,
-		GoDependencies:   goDependencies,
+		ProjectName:    s.config.Workspace.Name,
+		Version:        "0.1.0",
+		HasGo:          contains(languages, "go"),
+		HasJS:          hasFrontend,
+		HasFrontend:    hasFrontend,
+		WorkspaceRepo:  repoName,
+		GoVersion:      goVersion,
+		GoModules:      goModules,
+		GoDependencies: goDependencies,
 	}
 
 	// Use the same template file that forge new uses
@@ -148,7 +148,7 @@ func (s *Syncer) runBazelModTidy() error {
 // but misses blank imports like database drivers.
 func (s *Syncer) fixModuleBazelDependencies() error {
 	fmt.Println("🔧 Adding missing indirect dependencies...")
-	
+
 	modulePath := filepath.Join(s.workspaceRoot, "MODULE.bazel")
 	content, err := os.ReadFile(modulePath)
 	if err != nil {
@@ -158,18 +158,18 @@ func (s *Syncer) fixModuleBazelDependencies() error {
 	// Extract current use_repo dependencies
 	contentStr := string(content)
 	lines := strings.Split(contentStr, "\n")
-	
+
 	// Find the use_repo line for go_deps
 	var useRepoLineIndex = -1
 	var currentDeps []string
-	
+
 	for i, line := range lines {
 		if strings.Contains(line, "use_repo(go_deps,") {
 			useRepoLineIndex = i
 			// Extract current dependencies
 			// Handle both single line and multi-line use_repo
 			useRepoContent := line
-			
+
 			// If it doesn't end with ), it might be multi-line
 			if !strings.Contains(line, ")") {
 				for j := i + 1; j < len(lines); j++ {
@@ -179,12 +179,12 @@ func (s *Syncer) fixModuleBazelDependencies() error {
 					}
 				}
 			}
-			
+
 			// Parse dependencies from use_repo line
 			start := strings.Index(useRepoContent, "(go_deps,")
 			end := strings.LastIndex(useRepoContent, ")")
 			if start != -1 && end != -1 {
-				depsStr := useRepoContent[start+len("(go_deps,"):end]
+				depsStr := useRepoContent[start+len("(go_deps,") : end]
 				depsStr = strings.TrimSpace(depsStr)
 				if depsStr != "" {
 					// Split by comma and clean up
@@ -200,18 +200,18 @@ func (s *Syncer) fixModuleBazelDependencies() error {
 			break
 		}
 	}
-	
+
 	// Essential dependencies that should always be included (common blank imports)
 	essentialDeps := []string{
 		"com_github_lib_pq", // PostgreSQL driver
 	}
-	
+
 	// Add missing essential dependencies
 	depsMap := make(map[string]bool)
 	for _, dep := range currentDeps {
 		depsMap[dep] = true
 	}
-	
+
 	needsUpdate := false
 	for _, dep := range essentialDeps {
 		if !depsMap[dep] {
@@ -220,18 +220,18 @@ func (s *Syncer) fixModuleBazelDependencies() error {
 			needsUpdate = true
 		}
 	}
-	
+
 	if needsUpdate && useRepoLineIndex != -1 {
 		// Sort dependencies for consistency
 		// (keep existing order, just add new ones at the end)
-		
+
 		// Rebuild use_repo line
 		newUseRepoLine := `use_repo(go_deps`
 		for _, dep := range currentDeps {
 			newUseRepoLine += `, "` + dep + `"`
 		}
 		newUseRepoLine += `)`
-		
+
 		// Replace the line(s)
 		newLines := make([]string, 0, len(lines))
 		i := 0
@@ -248,16 +248,16 @@ func (s *Syncer) fixModuleBazelDependencies() error {
 				i++
 			}
 		}
-		
+
 		// Write back to file
 		newContent := strings.Join(newLines, "\n")
 		if err := os.WriteFile(modulePath, []byte(newContent), 0644); err != nil {
 			return fmt.Errorf("failed to write MODULE.bazel: %w", err)
 		}
-		
+
 		fmt.Printf("✅ Added missing dependencies: %v\n", essentialDeps)
 	}
-	
+
 	return nil
 }
 
@@ -371,7 +371,7 @@ func goModuleToRepoName(modulePath string) string {
 			domainParts[i], domainParts[j] = domainParts[j], domainParts[i]
 		}
 		reversedDomain := strings.Join(domainParts, "_")
-		
+
 		// Reconstruct with reversed domain
 		result := reversedDomain
 		for i := 1; i < len(parts); i++ {

@@ -75,7 +75,7 @@ func (s *Syncer) Sync() (*SyncReport, error) {
 			fmt.Printf("⚠️  bazel mod tidy failed: %v\n", err)
 			// Don't fail the sync, continue to gazelle
 		}
-		
+
 		// Step 4.5: Fix missing indirect dependencies (like blank import drivers)
 		if err := s.fixModuleBazelDependencies(); err != nil {
 			fmt.Printf("⚠️  Failed to fix MODULE.bazel dependencies: %v\n", err)
