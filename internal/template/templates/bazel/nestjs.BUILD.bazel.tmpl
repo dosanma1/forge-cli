@@ -1,0 +1,114 @@
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+
+exports_files([
+    "package.json",
+    "tsconfig.json",
+])
+
+# Source files filegroup
+filegroup(
+    name = "src_files",
+    srcs = glob(
+        ["src/**/*"],
+        allow_empty = False,
+    ),
+)
+
+# Node modules filegroup
+filegroup(
+    name = "node_modules",
+    srcs = glob(["node_modules/**/*"]),
+)
+
+# Build the NestJS application
+genrule(
+    name = "build",
+    srcs = [
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.build.json",
+        "nest-cli.json",
+        ":node_modules",
+        ":src_files",
+    ],
+    outs = ["dist.tar"],
+    cmd = """
+        set -e
+        
+        # Get node_modules directory path
+        NODE_MODULES_FILE=$$(echo "$(locations :node_modules)" | awk '{print $$1}')
+        NODE_MODULES_DIR=$$(dirname $$(dirname $$NODE_MODULES_FILE))
+        NODE_MODULES_PATH=$$(realpath $$NODE_MODULES_DIR)
+        
+        # Set up working directory
+        WORK_DIR=$$(mktemp -d)
+        trap "rm -rf $$WORK_DIR" EXIT
+        
+        # Copy all config files
+        cp $(location package.json) $$WORK_DIR/
+        cp $(location tsconfig.json) $$WORK_DIR/
+        cp $(location tsconfig.build.json) $$WORK_DIR/
+        cp $(location nest-cli.json) $$WORK_DIR/
+        
+        # Copy src directory preserving structure
+        mkdir -p $$WORK_DIR/src
+        for src_file in $(locations :src_files); do
+            # Get relative path from backend/services/{{.ServiceName}}/src/
+            rel_path=$${src_file#backend/services/{{.ServiceName}}/src/}
+            target_dir=$$(dirname $$WORK_DIR/src/$$rel_path)
+            mkdir -p $$target_dir
+            cp $$src_file $$target_dir/
+        done
+        
+        # Save output path before changing directories
+        OUT_PATH="$$(pwd)/$(location dist.tar)"
+        mkdir -p $$(dirname $$OUT_PATH)
+        
+        # Symlink node_modules instead of copying
+        ln -s $$NODE_MODULES_PATH $$WORK_DIR/node_modules
+        
+        # Build
+        cd $$WORK_DIR
+        ./node_modules/.bin/nest build
+        
+        # Copy node_modules for tarball (resolve symlink)
+        rm $$WORK_DIR/node_modules
+        cp -rL $$NODE_MODULES_PATH $$WORK_DIR/node_modules
+        
+        # Create tarball with dist and node_modules
+        tar -czf $$OUT_PATH dist node_modules package.json
+    """,
+    visibility = ["//visibility:public"],
+)
+
+# Container image
+pkg_tar(
+    name = "tar",
+    srcs = [":build"],
+    package_dir = "/app",
+)
+
+oci_image(
+    name = "image",
+    base = "@distroless_nodejs",
+    cmd = ["node", "dist/main.js"],
+    tars = [":tar"],
+    workdir = "/app",
+)
+
+# Load image into Docker (for Skaffold)
+oci_load(
+    name = "image.tar",
+    image = ":image",
+    repo_tags = ["{{.WorkspaceName}}/{{.ServiceName}}:latest"],
+    format = "docker",
+)
+
+# Export tarball for Skaffold
+filegroup(
+    name = "image_tarball.tar",
+    srcs = [":image.tar"],
+    output_group = "tarball",
+    visibility = ["//visibility:public"],
+)

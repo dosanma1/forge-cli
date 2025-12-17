@@ -77,7 +77,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 	// Prepare template data
 	githubOrg := "github.com/yourorg"
 	if config.Workspace.GitHub != nil {
-		githubOrg = config.Workspace.GitHub.Org
+		githubOrg = fmt.Sprintf("github.com/%s", config.Workspace.GitHub.Org)
 	}
 
 	dockerRegistry := "gcr.io/your-project"
@@ -91,7 +91,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 		"ServiceNameCamel":  template.Camelize(serviceName),
 		"ModulePath":        fmt.Sprintf("%s/%s/backend/services/%s", githubOrg, config.Workspace.Name, serviceName),
 		"WorkspaceName":     config.Workspace.Name,
-		"GitHubOrg":         githubOrg,
+		"GitHubOrg":         config.Workspace.GitHub.Org, // Just the org name without github.com/
 		"Registry":          dockerRegistry,
 		"ProjectName":       config.Workspace.Name,
 	}
@@ -257,7 +257,7 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 			Build: &workspace.ArchitectTarget{
 				Builder: "@forge/bazel:build",
 				Options: map[string]interface{}{
-					"target":     "/cmd/server:server",
+					"target":     "/...",
 					"goVersion":  config.Workspace.ToolVersions.Go,
 					"registry":   dockerRegistry,
 					"dockerfile": "Dockerfile",

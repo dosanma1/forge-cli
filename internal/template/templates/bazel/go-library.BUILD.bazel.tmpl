@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library"{{if .HasTests}}, "go_test"{{end}})
+
+go_library(
+    name = "{{.PackageName}}",
+    srcs = [{{range .Files}}
+        "{{.}}",{{end}}
+    ],
+    importpath = "{{.ImportPath}}",
+    visibility = ["//visibility:public"],
+)
+{{if .HasTests}}
+go_test(
+    name = "{{.PackageName}}_test",
+    srcs = [{{range .TestFiles}}
+        "{{.}}",{{end}}
+    ],
+    embed = [":{{.PackageName}}"],
+)
+{{end}}

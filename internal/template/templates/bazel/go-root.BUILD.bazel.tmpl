@@ -1,0 +1,13 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# Run this to auto-update BUILD files:
+# bazel run //:gazelle
+gazelle(name = "gazelle")
+
+# gazelle:prefix {{.ImportPath}}
+{{range .Modules}}# gazelle:resolve go {{.ImportPath}} //{{.Path}}
+{{end}}
+exports_files([
+    "go.mod",
+    "go.sum",
+])

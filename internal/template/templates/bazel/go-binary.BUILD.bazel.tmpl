@@ -1,0 +1,57 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library"{{if .HasTests}}, "go_test"{{end}})
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+
+go_library(
+    name = "lib",
+    srcs = [{{range .Files}}
+        "{{.}}",{{end}}
+    ],
+    importpath = "{{.ImportPath}}",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "{{.BinaryName}}",
+    embed = [":lib"],
+    visibility = ["//visibility:public"],
+)
+{{if .HasTests}}
+go_test(
+    name = "lib_test",
+    srcs = [{{range .TestFiles}}
+        "{{.}}",{{end}}
+    ],
+    embed = [":lib"],
+)
+{{end}}
+# Package binary into tar for container
+pkg_tar(
+    name = "tar",
+    srcs = [":{{.BinaryName}}"],
+    package_dir = "/app",
+)
+
+# Build container image
+oci_image(
+    name = "image",
+    base = "@distroless_base",
+    entrypoint = ["/app/{{.BinaryName}}"],
+    tars = [":tar"],
+)
+
+# Load image into Docker (for Skaffold)
+oci_load(
+    name = "image.tar",
+    image = ":image",
+    repo_tags = ["{{.ImageTag}}"],
+    format = "docker",
+)
+
+# Export tarball for Skaffold
+filegroup(
+    name = "image_tarball.tar",
+    srcs = [":image.tar"],
+    output_group = "tarball",
+    visibility = ["//visibility:public"],
+)

@@ -30,49 +30,66 @@ oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
     name = "distroless_base",
     image = "gcr.io/distroless/static-debian12",
-    tag = "latest",
+    digest = "sha256:4b2a093ef4649bccd586625090a3c668b254cfe180dee54f4c94f3e9bd7e381e",
     platforms = [
         "linux/amd64",
-        "linux/arm64",
+        "linux/arm64/v8",
+        "linux/arm/v7",
+        "linux/s390x",
+        "linux/ppc64le",
     ],
 )
 {{if .HasFrontend}}
 oci.pull(
     name = "distroless_nodejs",
     image = "gcr.io/distroless/nodejs22-debian12",
-    tag = "latest",
+    digest = "sha256:7b4e27d8cf7b2d1bd52cbc4ea5743b2b8cebdec7cc1c0a61d29cc8b94316b7ba",
     platforms = [
         "linux/amd64",
-        "linux/arm64",
+        "linux/arm64/v8",
+        "linux/arm/v7",
+        "linux/s390x",
+        "linux/ppc64le",
     ],
 )
 use_repo(
     oci,
     "distroless_base",
     "distroless_base_linux_amd64",
-    "distroless_base_linux_arm64",
+    "distroless_base_linux_arm64_v8",
+    "distroless_base_linux_arm_v7",
+    "distroless_base_linux_s390x",
+    "distroless_base_linux_ppc64le",
     "distroless_nodejs",
     "distroless_nodejs_linux_amd64",
-    "distroless_nodejs_linux_arm64",
+    "distroless_nodejs_linux_arm64_v8",
+    "distroless_nodejs_linux_arm_v7",
+    "distroless_nodejs_linux_s390x",
+    "distroless_nodejs_linux_ppc64le",
 )
 {{else}}
 use_repo(
     oci,
     "distroless_base",
     "distroless_base_linux_amd64",
-    "distroless_base_linux_arm64",
+    "distroless_base_linux_arm64_v8",
+    "distroless_base_linux_arm_v7",
+    "distroless_base_linux_s390x",
+    "distroless_base_linux_ppc64le",
 )
 {{end}}
 
 # Go toolchain setup
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
-go_sdk.download(version = "1.23.4")
+go_sdk.download(version = "{{.GoVersion}}")
 
-# Go dependencies from workspace-level go.mod
-# Use go.work to manage multiple modules, but Bazel only needs the root go.mod
+{{if .GoModules}}# Go dependencies from workspace modules
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+{{range .GoModules}}go_deps.from_file(go_mod = "//{{.}}:go.mod")
+{{end}}{{else}}# Go dependencies from workspace-level go.mod
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
-use_repo(go_deps)
+{{end}}
 
 {{if .HasFrontend}}
 # Node.js toolchain setup

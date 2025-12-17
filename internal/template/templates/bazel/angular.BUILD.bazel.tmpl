@@ -1,0 +1,132 @@
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_config")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+
+exports_files([
+    "angular.json",
+    "package.json",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.spec.json",
+])
+
+# Node modules for this app
+filegroup(
+    name = "node_modules",
+    srcs = glob(["node_modules/**/*"]),
+    visibility = ["//visibility:public"],
+)
+
+# Source files filegroup
+filegroup(
+    name = "src_files",
+    srcs = glob(
+        ["src/**/*"],
+        allow_empty = False,
+    ),
+)
+
+# Public files filegroup
+filegroup(
+    name = "public_files",
+    srcs = glob(
+        ["public/**/*"],
+        allow_empty = True,
+    ),
+)
+
+# Build the Angular application
+genrule(
+    name = "build",
+    srcs = [
+        ":src_files",
+        ":public_files",
+        "angular.json",
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.spec.json",
+        ":node_modules",
+    ],
+    outs = ["dist.tar"],
+    cmd = """
+        set -e
+        
+        # Get node_modules directory path
+        NODE_MODULES_FILE=$$(echo "$(locations :node_modules)" | awk '{print $$1}')
+        NODE_MODULES_DIR=$$(dirname $$(dirname $$NODE_MODULES_FILE))
+        NODE_MODULES_PATH=$$(realpath $$NODE_MODULES_DIR)
+        
+        # Save output path before changing directories
+        OUT_PATH="$$(pwd)/$(location dist.tar)"
+        
+        # Set up working directory
+        WORK_DIR=$$(mktemp -d)
+        trap "rm -rf $$WORK_DIR" EXIT
+        
+        # Copy config files to working directory
+        cp $(location angular.json) $$WORK_DIR/
+        cp $(location package.json) $$WORK_DIR/
+        cp $(location tsconfig.json) $$WORK_DIR/
+        cp $(location tsconfig.app.json) $$WORK_DIR/
+        cp $(location tsconfig.spec.json) $$WORK_DIR/
+        
+        # Copy src files preserving directory structure
+        for src_file in $(locations :src_files); do
+            # Get relative path (strip package path prefix)
+            rel_path=$${src_file#{{.PackagePath}}/src/}
+            # Create target directory
+            target_dir=$$(dirname $$WORK_DIR/src/$$rel_path)
+            mkdir -p $$target_dir
+            # Copy file
+            cp $$src_file $$target_dir/
+        done
+        
+        # Copy public files if they exist
+        for pub_file in $(locations :public_files); do
+            rel_path=$${pub_file#{{.PackagePath}}/public/}
+            target_dir=$$(dirname $$WORK_DIR/public/$$rel_path)
+            mkdir -p $$target_dir
+            cp $$pub_file $$target_dir/
+        done
+        
+        # Symlink node_modules
+        ln -s $$NODE_MODULES_PATH $$WORK_DIR/node_modules
+        
+        # Build Angular application
+        cd $$WORK_DIR
+        ./node_modules/.bin/ng build --configuration=production
+        
+        # Create tarball with build output
+        tar -czf $$OUT_PATH -C dist .
+    """,
+    visibility = ["//visibility:public"],
+)
+
+# Container image for deployment
+pkg_tar(
+    name = "tar",
+    srcs = [":build"],
+    package_dir = "/usr/share/nginx/html",
+)
+
+oci_image(
+    name = "image",
+    base = "@distroless_nodejs",
+    tars = [":tar"],
+)
+
+oci_load(
+    name = "image.tar",
+    image = ":image",
+    repo_tags = ["{{.WorkspaceName}}/{{.AppName}}:latest"],
+    format = "docker",
+)
+
+filegroup(
+    name = "image_tarball.tar",
+    srcs = [":image.tar"],
+    output_group = "tarball",
+    visibility = ["//visibility:public"],
+)
