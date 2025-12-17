@@ -56,27 +56,39 @@ func (s *Syncer) GenerateModuleBazel(languages []string) (string, error) {
 		}
 	}
 
+	// Extract Go dependencies from go.mod files
+	var goDependencies []string
+	if contains(languages, "go") && len(goModules) > 0 {
+		deps, err := s.extractGoModDependencies(goModules)
+		if err != nil {
+			return "", fmt.Errorf("failed to extract go dependencies: %w", err)
+		}
+		goDependencies = deps
+	}
+
 	// Determine if there are frontend projects
 	hasFrontend := contains(languages, "nestjs") || contains(languages, "angular") || contains(languages, "react")
 
 	data := struct {
-		ProjectName   string
-		Version       string
-		HasGo         bool
-		HasJS         bool
-		HasFrontend   bool
-		WorkspaceRepo string
-		GoVersion     string
-		GoModules     []string
+		ProjectName      string
+		Version          string
+		HasGo            bool
+		HasJS            bool
+		HasFrontend      bool
+		WorkspaceRepo    string
+		GoVersion        string
+		GoModules        []string
+		GoDependencies   []string
 	}{
-		ProjectName:   s.config.Workspace.Name,
-		Version:       "0.1.0",
-		HasGo:         contains(languages, "go"),
-		HasJS:         hasFrontend,
-		HasFrontend:   hasFrontend,
-		WorkspaceRepo: repoName,
-		GoVersion:     goVersion,
-		GoModules:     goModules,
+		ProjectName:      s.config.Workspace.Name,
+		Version:          "0.1.0",
+		HasGo:            contains(languages, "go"),
+		HasJS:            hasFrontend,
+		HasFrontend:      hasFrontend,
+		WorkspaceRepo:    repoName,
+		GoVersion:        goVersion,
+		GoModules:        goModules,
+		GoDependencies:   goDependencies,
 	}
 
 	// Use the same template file that forge new uses
@@ -131,6 +143,124 @@ func (s *Syncer) runBazelModTidy() error {
 	return nil
 }
 
+// fixModuleBazelDependencies adds missing indirect dependencies to MODULE.bazel.
+// This is needed because bazel mod tidy only includes direct dependencies by default,
+// but misses blank imports like database drivers.
+func (s *Syncer) fixModuleBazelDependencies() error {
+	fmt.Println("🔧 Adding missing indirect dependencies...")
+	
+	modulePath := filepath.Join(s.workspaceRoot, "MODULE.bazel")
+	content, err := os.ReadFile(modulePath)
+	if err != nil {
+		return fmt.Errorf("failed to read MODULE.bazel: %w", err)
+	}
+
+	// Extract current use_repo dependencies
+	contentStr := string(content)
+	lines := strings.Split(contentStr, "\n")
+	
+	// Find the use_repo line for go_deps
+	var useRepoLineIndex = -1
+	var currentDeps []string
+	
+	for i, line := range lines {
+		if strings.Contains(line, "use_repo(go_deps,") {
+			useRepoLineIndex = i
+			// Extract current dependencies
+			// Handle both single line and multi-line use_repo
+			useRepoContent := line
+			
+			// If it doesn't end with ), it might be multi-line
+			if !strings.Contains(line, ")") {
+				for j := i + 1; j < len(lines); j++ {
+					useRepoContent += " " + strings.TrimSpace(lines[j])
+					if strings.Contains(lines[j], ")") {
+						break
+					}
+				}
+			}
+			
+			// Parse dependencies from use_repo line
+			start := strings.Index(useRepoContent, "(go_deps,")
+			end := strings.LastIndex(useRepoContent, ")")
+			if start != -1 && end != -1 {
+				depsStr := useRepoContent[start+len("(go_deps,"):end]
+				depsStr = strings.TrimSpace(depsStr)
+				if depsStr != "" {
+					// Split by comma and clean up
+					for _, dep := range strings.Split(depsStr, ",") {
+						dep = strings.TrimSpace(dep)
+						dep = strings.Trim(dep, `"`)
+						if dep != "" {
+							currentDeps = append(currentDeps, dep)
+						}
+					}
+				}
+			}
+			break
+		}
+	}
+	
+	// Essential dependencies that should always be included (common blank imports)
+	essentialDeps := []string{
+		"com_github_lib_pq", // PostgreSQL driver
+	}
+	
+	// Add missing essential dependencies
+	depsMap := make(map[string]bool)
+	for _, dep := range currentDeps {
+		depsMap[dep] = true
+	}
+	
+	needsUpdate := false
+	for _, dep := range essentialDeps {
+		if !depsMap[dep] {
+			currentDeps = append(currentDeps, dep)
+			depsMap[dep] = true
+			needsUpdate = true
+		}
+	}
+	
+	if needsUpdate && useRepoLineIndex != -1 {
+		// Sort dependencies for consistency
+		// (keep existing order, just add new ones at the end)
+		
+		// Rebuild use_repo line
+		newUseRepoLine := `use_repo(go_deps`
+		for _, dep := range currentDeps {
+			newUseRepoLine += `, "` + dep + `"`
+		}
+		newUseRepoLine += `)`
+		
+		// Replace the line(s)
+		newLines := make([]string, 0, len(lines))
+		i := 0
+		for i < len(lines) {
+			if i == useRepoLineIndex {
+				newLines = append(newLines, newUseRepoLine)
+				// Skip any continuation lines
+				for i < len(lines) && !strings.Contains(lines[i], ")") {
+					i++
+				}
+				i++ // Skip the closing line
+			} else {
+				newLines = append(newLines, lines[i])
+				i++
+			}
+		}
+		
+		// Write back to file
+		newContent := strings.Join(newLines, "\n")
+		if err := os.WriteFile(modulePath, []byte(newContent), 0644); err != nil {
+			return fmt.Errorf("failed to write MODULE.bazel: %w", err)
+		}
+		
+		fmt.Printf("✅ Added missing dependencies: %v\n", essentialDeps)
+	}
+	
+	return nil
+}
+
 // contains checks if a slice contains a string.
 func contains(slice []string, item string) bool {
 	for _, s := range slice {
@@ -139,6 +269,118 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// extractGoModDependencies parses go.mod files and extracts all dependencies.
+func (s *Syncer) extractGoModDependencies(modules []string) ([]string, error) {
+	depMap := make(map[string]bool)
+
+	for _, module := range modules {
+		goModPath := filepath.Join(s.workspaceRoot, module, "go.mod")
+		content, err := os.ReadFile(goModPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("failed to read %s: %w", goModPath, err)
+		}
+
+		lines := strings.Split(string(content), "\n")
+		inRequireBlock := false
+
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+
+			// Check for "require (" block
+			if strings.HasPrefix(line, "require (") {
+				inRequireBlock = true
+				continue
+			}
+
+			if inRequireBlock {
+				if line == ")" {
+					inRequireBlock = false
+					continue
+				}
+
+				// Parse dependency line: "github.com/lib/pq v1.10.9"
+				if line != "" && !strings.HasPrefix(line, "//") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						modulePath := parts[0]
+						// Convert to Bazel repository name
+						repoName := goModuleToRepoName(modulePath)
+						depMap[repoName] = true
+					}
+				}
+			} else if strings.HasPrefix(line, "require ") {
+				// Single line require statement
+				line = strings.TrimPrefix(line, "require ")
+				parts := strings.Fields(line)
+				if len(parts) >= 2 {
+					modulePath := parts[0]
+					repoName := goModuleToRepoName(modulePath)
+					depMap[repoName] = true
+				}
+			}
+		}
+	}
+
+	// Convert map to sorted slice
+	deps := make([]string, 0, len(depMap))
+	for dep := range depMap {
+		deps = append(deps, dep)
+	}
+
+	return deps, nil
+}
+
+// goModuleToRepoName converts a Go module path to a Bazel repository name.
+// e.g., "github.com/lib/pq" -> "com_github_lib_pq"
+func goModuleToRepoName(modulePath string) string {
+	// Remove version suffixes like /v2, /v3
+	if idx := strings.LastIndex(modulePath, "/v"); idx != -1 {
+		if len(modulePath) > idx+2 {
+			// Check if it's a version suffix
+			rest := modulePath[idx+2:]
+			isVersion := true
+			for _, ch := range rest {
+				if ch < '0' || ch > '9' {
+					isVersion = false
+					break
+				}
+			}
+			if isVersion {
+				modulePath = modulePath[:idx]
+			}
+		}
+	}
+
+	// Replace dots and slashes with underscores
+	name := strings.ReplaceAll(modulePath, ".", "_")
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "-", "_")
+
+	// Reverse domain notation (github.com -> com_github)
+	parts := strings.Split(modulePath, "/")
+	if len(parts) >= 2 {
+		domain := parts[0]
+		domainParts := strings.Split(domain, ".")
+		// Reverse domain parts
+		for i, j := 0, len(domainParts)-1; i < j; i, j = i+1, j-1 {
+			domainParts[i], domainParts[j] = domainParts[j], domainParts[i]
+		}
+		reversedDomain := strings.Join(domainParts, "_")
+		
+		// Reconstruct with reversed domain
+		result := reversedDomain
+		for i := 1; i < len(parts); i++ {
+			result += "_" + strings.ReplaceAll(strings.ReplaceAll(parts[i], ".", "_"), "-", "_")
+		}
+		return result
+	}
+
+	return name
 }
 
 // parseGoWorkModules extracts the list of module directories from go.work.

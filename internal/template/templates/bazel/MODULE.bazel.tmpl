@@ -13,8 +13,8 @@ bazel_dep(name = "rules_pkg", version = "1.0.1")
 bazel_dep(name = "rules_oci", version = "2.0.0")
 
 # Go support (official Bazel rules)
-bazel_dep(name = "rules_go", version = "0.50.1")
-bazel_dep(name = "gazelle", version = "0.39.1")
+bazel_dep(name = "rules_go", version = "0.51.0")
+bazel_dep(name = "gazelle", version = "0.40.0")
 
 {{if .HasFrontend}}
 # Node.js and JavaScript/TypeScript support (Aspect Build)
@@ -86,7 +86,8 @@ go_sdk.download(version = "{{.GoVersion}}")
 {{if .GoModules}}# Go dependencies from workspace modules
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 {{range .GoModules}}go_deps.from_file(go_mod = "//{{.}}:go.mod")
-{{end}}{{else}}# Go dependencies from workspace-level go.mod
+{{end}}{{if .GoDependencies}}use_repo(go_deps, {{range $i, $dep := .GoDependencies}}{{if $i}}, {{end}}"{{$dep}}"{{end}}){{end}}
+{{else}}# Go dependencies from workspace-level go.mod
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
 {{end}}
