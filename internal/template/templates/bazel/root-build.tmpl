@@ -1,0 +1,9 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix {{.ModulePrefix}}
+# gazelle:go_naming_convention go_default_library
+{{range .GazelleDirectives}}# {{.}}
+{{end}}
+{{range .Projects}}# gazelle:resolve go {{$.ModulePrefix}}/{{.Root}} //{{.Root}}:go_default_library
+{{end}}
+gazelle(name = "gazelle")

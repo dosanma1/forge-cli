@@ -24,6 +24,9 @@ type DeployOptions struct {
 	// Verbose enables verbose output
 	Verbose bool
 
+	// Debug enables debug output including generated Skaffold config
+	Debug bool
+
 	// Tail streams logs after deployment
 	Tail bool
 

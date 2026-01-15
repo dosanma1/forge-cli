@@ -56,6 +56,11 @@ deps:
 # Run build and install
 all: clean build install
 
+# Deploy (for testing)
+deploy: install
+	@echo "Deploying with forge..."
+	@cd ../mmo-game && forge deploy --env=local
+
 # Display help
 help:
 	@echo "Available targets:"
@@ -69,4 +74,5 @@ help:
 	@echo "  lint           - Run golangci-lint"
 	@echo "  tidy           - Tidy go.mod dependencies"
 	@echo "  all            - Clean, build, and install"
+	@echo "  deploy         - Build, install and deploy to test workspace"
 	@echo "  help           - Display this help message"

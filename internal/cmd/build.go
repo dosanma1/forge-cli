@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/dosanma1/forge-cli/internal/builder"
 	"github.com/dosanma1/forge-cli/internal/workspace"
@@ -80,13 +82,32 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Track build results for summary
+	type buildResult struct {
+		project  string
+		duration time.Duration
+		success  bool
+		err      error
+	}
+	var results []buildResult
+	totalStart := time.Now()
+
+	fmt.Printf("\n🔨 Building %d project(s)...\n\n", len(projectNames))
+
 	// Build all projects using their configured builders
 	// Build command ALWAYS uses direct builders (never Skaffold)
 	for _, projectName := range projectNames {
 		project := config.Projects[projectName]
+		buildStart := time.Now()
 
 		if project.Architect == nil || project.Architect.Build == nil {
-			return fmt.Errorf("project %s has no build configuration", projectName)
+			results = append(results, buildResult{
+				project:  projectName,
+				duration: time.Since(buildStart),
+				success:  false,
+				err:      fmt.Errorf("project %s has no build configuration", projectName),
+			})
+			continue
 		}
 
 		// Determine configuration
@@ -102,12 +123,16 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		builderName := project.Architect.Build.Builder
 		projectBuilder, err := builder.GetBuilder(builderName)
 		if err != nil {
-			return fmt.Errorf("failed to get builder for %s: %w", projectName, err)
+			results = append(results, buildResult{
+				project:  projectName,
+				duration: time.Since(buildStart),
+				success:  false,
+				err:      fmt.Errorf("failed to get builder: %w", err),
+			})
+			continue
 		}
 
-		if buildVerbose {
-			fmt.Printf("🔨 Building %s with %s (configuration: %s)\n", projectName, builderName, buildConfig)
-		}
+		fmt.Printf("  🔨 Building %s with %s (configuration: %s)\n", projectName, builderName, buildConfig)
 
 		// Get project absolute path
 		projectAbsPath := filepath.Join(workspaceRoot, project.Root)
@@ -135,17 +160,73 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 
 		artifact, err := projectBuilder.Build(ctx, opts)
+		buildDuration := time.Since(buildStart)
+
 		if err != nil {
-			return fmt.Errorf("❌ Build failed for %s: %w", projectName, err)
+			fmt.Printf("  ❌ Failed %s (%.1fs)\n", projectName, buildDuration.Seconds())
+			results = append(results, buildResult{
+				project:  projectName,
+				duration: buildDuration,
+				success:  false,
+				err:      err,
+			})
+			continue
 		}
 
-		if buildVerbose {
-			fmt.Printf("✅ Built %s: %s at %s\n", projectName, artifact.Type, artifact.Path)
+		fmt.Printf("  ✅ Built %s (%.1fs)\n", projectName, buildDuration.Seconds())
+		if buildVerbose && artifact != nil {
+			fmt.Printf("     %s at %s\n", artifact.Type, artifact.Path)
+		}
+		results = append(results, buildResult{
+			project:  projectName,
+			duration: buildDuration,
+			success:  true,
+		})
+	}
+
+	// Print summary
+	totalDuration := time.Since(totalStart)
+	fmt.Printf("\n" + strings.Repeat("─", 50) + "\n")
+
+	successCount := 0
+	failCount := 0
+	for _, result := range results {
+		if result.success {
+			successCount++
+		} else {
+			failCount++
 		}
 	}
 
-	fmt.Printf("✅ All builds completed successfully!\n")
-	return nil
+	if failCount == 0 {
+		fmt.Printf("✅ All builds completed successfully!\n")
+		fmt.Printf("   Total time: %.1fs\n\n", totalDuration.Seconds())
+		return nil
+	}
+
+	// Print failure summary
+	fmt.Printf("❌ Build Summary: %d succeeded, %d failed\n", successCount, failCount)
+	fmt.Printf("   Total time: %.1fs\n\n", totalDuration.Seconds())
+
+	fmt.Println("Failed builds:")
+	for _, result := range results {
+		if !result.success {
+			fmt.Printf("  • %s: %v\n", result.project, result.err)
+
+			// Suggest fixes based on error patterns
+			errMsg := result.err.Error()
+			if strings.Contains(errMsg, "no such target") || strings.Contains(errMsg, "no such package") {
+				fmt.Println("    💡 Try running: forge sync")
+			} else if strings.Contains(errMsg, "missing dependencies") || strings.Contains(errMsg, "cannot load") {
+				fmt.Println("    💡 Try running: forge sync")
+			} else if strings.Contains(errMsg, "BUILD") && strings.Contains(errMsg, "file") {
+				fmt.Println("    💡 BUILD files may be out of sync. Try: forge sync")
+			}
+		}
+	}
+	fmt.Println()
+
+	return fmt.Errorf("%d build(s) failed", failCount)
 }
 
 // findAngularWorkspaceRoot finds the directory containing angular.json

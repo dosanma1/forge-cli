@@ -36,6 +36,7 @@ Examples:
 
 var (
 	serviceLanguage string
+	serviceDeployer string
 	appLanguage     string
 )
 
@@ -103,6 +104,7 @@ Examples:
 
 func init() {
 	generateServiceCmd.Flags().StringVarP(&serviceLanguage, "lang", "l", "", "Service language (go, nestjs)")
+	generateServiceCmd.Flags().StringVarP(&serviceDeployer, "deployer", "d", "", "Deployment target (helm, cloudrun)")
 	generateAppCmd.Flags().StringVarP(&appLanguage, "lang", "l", "", "Application language (angular, react)")
 
 	generateCmd.AddCommand(generateServiceCmd)
@@ -227,20 +229,28 @@ func runGenerateService(cmd *cobra.Command, args []string) error {
 	serviceLanguage = strings.ToLower(serviceLanguage)
 
 	// Prompt for deployer selection
-	_, deployerChoice, err := ui.AskSelect("Select deployment target:", []string{"Helm (Kubernetes)", "CloudRun"})
-	if err != nil {
-		return fmt.Errorf("cancelled: %w", err)
-	}
-
-	// Map display names to internal names
 	var deployer string
-	switch deployerChoice {
-	case "Helm (Kubernetes)":
-		deployer = "helm"
-	case "CloudRun":
-		deployer = "cloudrun"
-	default:
-		deployer = "helm"
+	if serviceDeployer != "" {
+		deployer = strings.ToLower(serviceDeployer)
+		// Validate deployer
+		if deployer != "helm" && deployer != "cloudrun" {
+			return fmt.Errorf("unsupported deployer: %s (supported: helm, cloudrun)", deployer)
+		}
+	} else {
+		_, deployerChoice, err := ui.AskSelect("Select deployment target:", []string{"Helm (Kubernetes)", "CloudRun"})
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+
+		// Map display names to internal names
+		switch deployerChoice {
+		case "Helm (Kubernetes)":
+			deployer = "helm"
+		case "CloudRun":
+			deployer = "cloudrun"
+		default:
+			deployer = "helm"
+		}
 	}
 
 	// Create appropriate generator
@@ -268,6 +278,15 @@ func runGenerateService(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	if err := gen.Generate(ctx, opts); err != nil {
 		return fmt.Errorf("failed to generate %s service: %w", serviceLanguage, err)
+	}
+
+	// Auto-sync workspace for Go services (consolidates go.mod)
+	if serviceLanguage == "go" {
+		fmt.Println("\n🔄 Running forge sync to consolidate dependencies...")
+		if err := runSync(cmd, []string{"--yes"}); err != nil {
+			fmt.Printf("⚠️  Warning: Auto-sync failed: %v\n", err)
+			fmt.Println("   Run 'forge sync' manually to complete setup")
+		}
 	}
 
 	return nil

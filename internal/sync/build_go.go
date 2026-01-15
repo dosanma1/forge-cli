@@ -287,7 +287,7 @@ func (s *Syncer) findMigrationDepsForImport(importPath string) []string {
 	}
 
 	// Find migration deps for the package
-	return s.findMigrationDepsForPackage(pkgPath, importPath)
+	return s.findMigrationDepsForPackage(pkgPath)
 }
 
 // findPackagePathForImport converts an import path to a file system path relative to workspace root
@@ -319,7 +319,7 @@ func (s *Syncer) findPackagePathForImport(importPath string) string {
 }
 
 // findMigrationDepsForPackage finds migration filegroups that should be included for a given package
-func (s *Syncer) findMigrationDepsForPackage(pkgPath, importPath string) []string {
+func (s *Syncer) findMigrationDepsForPackage(pkgPath string) []string {
 	var deps []string
 	seenDeps := make(map[string]bool)
 
@@ -381,7 +381,7 @@ func (s *Syncer) findMigrationDepsForPackage(pkgPath, importPath string) []strin
 			}
 
 			// Recursively find migrations for the imported package
-			transitiveDeps := s.findMigrationDepsForPackage(impPkgPath, imp)
+			transitiveDeps := s.findMigrationDepsForPackage(impPkgPath)
 			for _, dep := range transitiveDeps {
 				if !seenDeps[dep] {
 					deps = append(deps, dep)

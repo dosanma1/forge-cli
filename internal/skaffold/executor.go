@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/config"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/runner"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/runner/runcontext"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/schema/latest"
+	"gopkg.in/yaml.v3"
 )
 
 // Executor wraps the Skaffold API for build, deploy, and run operations.
@@ -68,42 +70,51 @@ func (e *Executor) Deploy(ctx context.Context, opts DeployOptions) error {
 		return fmt.Errorf("profile is required for deploy")
 	}
 
-	// Create run context
-	runCtx, err := e.createRunContext(ctx, opts.Profile, opts.Verbose)
+	// Apply profile before handing off to CLI so rendered config matches intent
+	profiledCfg := e.applyProfile(opts.Profile)
+
+	configYAML, err := yaml.Marshal(profiledCfg)
 	if err != nil {
-		return fmt.Errorf("failed to create run context: %w", err)
+		return fmt.Errorf("failed to marshal skaffold config: %w", err)
 	}
 
-	// Create runner
-	r, err := runner.NewForConfig(ctx, runCtx)
+	// Always persist to a temp file; also mirror to the old debug path for discoverability
+	tmpFile, err := os.CreateTemp("", "forge-skaffold-*.yaml")
 	if err != nil {
-		return fmt.Errorf("failed to create runner: %w", err)
+		return fmt.Errorf("failed to create temp skaffold config: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(configYAML); err != nil {
+		return fmt.Errorf("failed to write temp skaffold config: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp skaffold config: %w", err)
 	}
 
-	// Get output writer
-	out := os.Stdout
-
-	if opts.SkipBuild {
-		// TODO: Load existing build artifacts and deploy
-		return fmt.Errorf("deploy without build not yet implemented")
-	} else {
-		// Build first
-		buildResults, err := r.Build(ctx, out, runCtx.Artifacts())
-		if err != nil {
-			return fmt.Errorf("build failed: %w", err)
+	if opts.Debug {
+		fmt.Println("\n=== DEBUG: Skaffold Configuration ===")
+		fmt.Println(string(configYAML))
+		if err := os.WriteFile("/tmp/skaffold-debug.yaml", configYAML, 0644); err == nil {
+			fmt.Println("✓ Written Skaffold config to /tmp/skaffold-debug.yaml")
 		}
+		fmt.Printf("Temp config: %s\n", tmpFile.Name())
+		fmt.Println("=== END DEBUG ===\n")
+	}
 
-		// Render manifests
-		manifestList, err := r.Render(ctx, out, buildResults, false)
-		if err != nil {
-			return fmt.Errorf("render failed: %w", err)
-		}
+	args := []string{"run", "-f", tmpFile.Name(), "--profile", opts.Profile}
+	if opts.Verbose || opts.Debug {
+		args = append(args, "-v", "debug")
+	}
 
-		// Deploy with logs
-		err = r.DeployAndLog(ctx, out, buildResults, manifestList)
-		if err != nil {
-			return fmt.Errorf("deploy failed: %w", err)
-		}
+	cmd := exec.CommandContext(ctx, "skaffold", args...)
+	cmd.Dir = e.workspaceRoot
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = append(os.Environ(), "SKAFFOLD_UPDATE_CHECK=false")
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("skaffold cli deploy failed: %w", err)
 	}
 
 	return nil

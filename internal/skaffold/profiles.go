@@ -2,6 +2,9 @@ package skaffold
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/schema/latest"
 	"github.com/dosanma1/forge-cli/internal/workspace"
@@ -10,7 +13,7 @@ import (
 // GenerateProfiles creates Skaffold profiles from forge.json configurations.
 // Each configuration key becomes a profile with that exact name.
 // Profiles inherit from base config and override registry, namespaces, and build args.
-func GenerateProfiles(config *workspace.Config, projectNames []string, platform string) ([]latest.Profile, error) {
+func GenerateProfiles(config *workspace.Config, projectNames []string, workspaceRoot string, platform string) ([]latest.Profile, error) {
 	profiles := []latest.Profile{}
 
 	// Collect all unique configuration keys across all selected projects
@@ -18,7 +21,7 @@ func GenerateProfiles(config *workspace.Config, projectNames []string, platform 
 
 	// Create a profile for each configuration
 	for _, configKey := range configKeys {
-		profile := createProfile(config, projectNames, configKey, platform)
+		profile := createProfile(config, projectNames, configKey, workspaceRoot, platform)
 		// Skip profiles with no artifacts (e.g., when all projects use @forge/angular:build)
 		if len(profile.Pipeline.Build.Artifacts) > 0 {
 			profiles = append(profiles, profile)
@@ -60,14 +63,20 @@ func collectConfigurationKeys(config *workspace.Config, projectNames []string) [
 }
 
 // createProfile creates a single Skaffold profile for a configuration key.
-func createProfile(config *workspace.Config, projectNames []string, configKey string, platform string) latest.Profile {
+func createProfile(config *workspace.Config, projectNames []string, configKey string, workspaceRoot string, platform string) latest.Profile {
 	profile := latest.Profile{
 		Name: configKey,
 		Pipeline: latest.Pipeline{
 			Build: latest.BuildConfig{
 				Artifacts: []*latest.Artifact{},
 			},
-			Deploy: latest.DeployConfig{},
+			Deploy: latest.DeployConfig{
+				DeployType: latest.DeployType{
+					LegacyHelmDeploy: &latest.LegacyHelmDeploy{
+						Releases: []latest.HelmRelease{},
+					},
+				},
+			},
 		},
 	}
 
@@ -138,23 +147,88 @@ func createProfile(config *workspace.Config, projectNames []string, configKey st
 			// Merge deploy options
 			mergedDeployOptions := mergeOptions(deployOptions, deployConfigOptions)
 
-			// Apply namespace override for Helm
+			// Create Helm releases for this profile
 			if project.Architect.Deploy.Deployer == "@forge/helm:deploy" {
-				if profile.Pipeline.Deploy.LegacyHelmDeploy == nil {
-					profile.Pipeline.Deploy.LegacyHelmDeploy = &latest.LegacyHelmDeploy{
-						Releases: []latest.HelmRelease{},
-					}
-				}
+				deployTarget := project.Architect.Deploy
 
-				// Update namespace for this project's release
-				namespace := getStringOption(mergedDeployOptions, "namespace", "default")
+				// Check if project has multiple instances
+				if instances, ok := deployTarget.Options["instances"].([]interface{}); ok && len(instances) > 0 {
+					// Deploy multiple instances of the same service
+					for _, inst := range instances {
+						instanceName := fmt.Sprintf("%v", inst)
+						release := createHelmReleaseForInstance(projectName, instanceName, project, deployTarget, "")
 
-				// Find and update the release for this project
-				for i, release := range profile.Pipeline.Deploy.LegacyHelmDeploy.Releases {
-					if release.Name == projectName {
-						profile.Pipeline.Deploy.LegacyHelmDeploy.Releases[i].Namespace = namespace
-						break
+						// Apply namespace from merged options
+						namespace := getStringOption(mergedDeployOptions, "namespace", "default")
+						release.Namespace = namespace
+
+						// Add environment-specific values file if using local chart with envs/ structure
+						if len(release.ChartPath) > 0 && !strings.HasPrefix(release.ChartPath, "http://") && !strings.HasPrefix(release.ChartPath, "https://") {
+							// Check for envs/{env}/values.yaml
+							envValuesPath := filepath.Join(release.ChartPath, "envs", configKey, "values.yaml")
+							// Add to values files if not already present
+							found := false
+							for _, vf := range release.ValuesFiles {
+								if vf == envValuesPath {
+									found = true
+									break
+								}
+							}
+							if !found {
+								release.ValuesFiles = append(release.ValuesFiles, envValuesPath)
+							}
+
+							// Check for envs/{env}/secrets.yaml
+							envSecretsPath := filepath.Join(release.ChartPath, "envs", configKey, "secrets.yaml")
+							// Add to values files if it exists in the workspace
+							if _, err := os.Stat(filepath.Join(workspaceRoot, envSecretsPath)); err == nil {
+								release.ValuesFiles = append(release.ValuesFiles, envSecretsPath)
+								release.UseHelmSecrets = true
+							}
+						}
+
+						profile.Pipeline.Deploy.LegacyHelmDeploy.Releases = append(
+							profile.Pipeline.Deploy.LegacyHelmDeploy.Releases,
+							release,
+						)
 					}
+				} else {
+					// Single instance deployment
+					release := createHelmRelease(projectName, project, deployTarget, "")
+
+					// Apply namespace from merged options
+					namespace := getStringOption(mergedDeployOptions, "namespace", "default")
+					release.Namespace = namespace
+
+					// Add environment-specific values file if using local chart with envs/ structure
+					if len(release.ChartPath) > 0 && !strings.HasPrefix(release.ChartPath, "http://") && !strings.HasPrefix(release.ChartPath, "https://") {
+						// Check for envs/{env}/values.yaml
+						envValuesPath := filepath.Join(release.ChartPath, "envs", configKey, "values.yaml")
+						// Add to values files if not already present
+						found := false
+						for _, vf := range release.ValuesFiles {
+							if vf == envValuesPath {
+								found = true
+								break
+							}
+						}
+						if !found {
+							release.ValuesFiles = append(release.ValuesFiles, envValuesPath)
+						}
+
+						// Check for envs/{env}/secrets.yaml
+						envSecretsPath := filepath.Join(release.ChartPath, "envs", configKey, "secrets.yaml")
+						// Add to values files if it exists in the workspace
+						if _, err := os.Stat(filepath.Join(workspaceRoot, envSecretsPath)); err == nil {
+							release.ValuesFiles = append(release.ValuesFiles, envSecretsPath)
+							release.UseHelmSecrets = true
+						}
+					}
+
+					profile.Pipeline.Deploy.LegacyHelmDeploy.Releases = append(
+						profile.Pipeline.Deploy.LegacyHelmDeploy.Releases,
+						release,
+					)
 				}
 			}
 		}

@@ -44,7 +44,7 @@ func GenerateConfig(config *workspace.Config, projectNames []string, workspaceRo
 	}
 
 	// Generate profiles from configurations
-	profiles, err := GenerateProfiles(config, projectNames, platform)
+	profiles, err := GenerateProfiles(config, projectNames, workspaceRoot, platform)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate profiles: %w", err)
 	}

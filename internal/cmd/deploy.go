@@ -17,6 +17,7 @@ import (
 var (
 	deployEnv       string
 	deployVerbose   bool
+	deployDebug     bool
 	deployTail      bool
 	deploySkipBuild bool
 	deployPlatform  string
@@ -44,6 +45,7 @@ func init() {
 	rootCmd.AddCommand(deployCmd)
 	deployCmd.Flags().StringVarP(&deployEnv, "env", "e", "", "Environment/profile to deploy (local, development, production)")
 	deployCmd.Flags().BoolVarP(&deployVerbose, "verbose", "v", false, "Show verbose output")
+	deployCmd.Flags().BoolVarP(&deployDebug, "debug", "d", false, "Show debug output including generated Skaffold config")
 	deployCmd.Flags().BoolVarP(&deployTail, "tail", "t", false, "Stream logs after deployment")
 	deployCmd.Flags().BoolVar(&deploySkipBuild, "skip-build", false, "Skip build phase")
 	deployCmd.Flags().StringVar(&deployPlatform, "platform", "", "Target platform for builds (empty = native platform)")
@@ -68,16 +70,27 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Determine which projects to deploy
 	projectNames := args
 	if len(projectNames) == 0 {
-		// Deploy all projects
-		for name := range config.Projects {
-			projectNames = append(projectNames, name)
+		// Deploy all deployable projects (skip libraries)
+		for name, project := range config.Projects {
+			// Skip libraries - only deploy services/applications
+			if project.ProjectType == "library" {
+				continue
+			}
+			// Only include projects with deploy configuration
+			if project.Architect != nil && project.Architect.Deploy != nil {
+				projectNames = append(projectNames, name)
+			}
 		}
 	}
 
-	// Validate that all specified projects exist
+	// Validate that all specified projects exist and are deployable
 	for _, projectName := range projectNames {
-		if _, exists := config.Projects[projectName]; !exists {
+		project, exists := config.Projects[projectName]
+		if !exists {
 			return fmt.Errorf("project %q not found in forge.json", projectName)
+		}
+		if project.ProjectType == "library" {
+			return fmt.Errorf("project %q is a library and cannot be deployed", projectName)
 		}
 	}
 
@@ -132,6 +145,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			Profile:   deployConfig,
 			SkipBuild: deploySkipBuild,
 			Verbose:   deployVerbose,
+			Debug:     deployDebug,
 			Tail:      deployTail,
 		}
 

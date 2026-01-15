@@ -26,9 +26,9 @@ func (s *Syncer) GenerateModuleBazel(languages []string) (string, error) {
 		goVersion = s.config.Workspace.ToolVersions.Go
 	}
 
-	// Parse go.work to find library modules with go.mod files
-	// Only libraries should be in go_deps, services get dependencies transitively
+	// Parse go.work to find all modules
 	var goModules []string
+	var useRootGoMod bool
 	if contains(languages, "go") {
 		modules, err := s.parseGoWorkModules()
 		if err != nil {
@@ -54,6 +54,19 @@ func (s *Syncer) GenerateModuleBazel(languages []string) (string, error) {
 				goModules = append(goModules, mod)
 			}
 		}
+
+		// Bazel only supports single go_deps.from_file
+		// Create root go.mod aggregator that merges deps from all library modules
+		if len(goModules) > 0 {
+			if err := s.createAggregatorGoMod(goModules); err != nil {
+				return "", fmt.Errorf("failed to create aggregator go.mod: %w", err)
+			}
+			useRootGoMod = true
+			goModules = nil // Clear so template uses root
+		} else {
+			// No modules found, fall back to root go.mod if it exists
+			useRootGoMod = true
+		}
 	}
 
 	// Extract Go dependencies from go.mod files
@@ -78,6 +91,7 @@ func (s *Syncer) GenerateModuleBazel(languages []string) (string, error) {
 		WorkspaceRepo  string
 		GoVersion      string
 		GoModules      []string
+		UseRootGoMod   bool
 		GoDependencies []string
 	}{
 		ProjectName:    s.config.Workspace.Name,
@@ -88,6 +102,7 @@ func (s *Syncer) GenerateModuleBazel(languages []string) (string, error) {
 		WorkspaceRepo:  repoName,
 		GoVersion:      goVersion,
 		GoModules:      goModules,
+		UseRootGoMod:   useRootGoMod,
 		GoDependencies: goDependencies,
 	}
 
@@ -430,4 +445,99 @@ func (s *Syncer) parseGoWorkModules() ([]string, error) {
 	}
 
 	return modules, nil
+}
+
+// createAggregatorGoMod creates or updates a root go.mod that aggregates dependencies from all modules.
+func (s *Syncer) createAggregatorGoMod(modules []string) error {
+	goModPath := filepath.Join(s.workspaceRoot, "go.mod")
+
+	// Collect all unique dependencies from all modules
+	depMap := make(map[string]string) // module path -> version
+	var goVersion string
+
+	for _, module := range modules {
+		modGoModPath := filepath.Join(s.workspaceRoot, module, "go.mod")
+		content, err := os.ReadFile(modGoModPath)
+		if err != nil {
+			continue
+		}
+
+		lines := strings.Split(string(content), "\n")
+		inRequireBlock := false
+
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+
+			// Extract go version
+			if strings.HasPrefix(line, "go ") && goVersion == "" {
+				goVersion = strings.TrimPrefix(line, "go ")
+			}
+
+			// Check for "require (" block
+			if strings.HasPrefix(line, "require (") {
+				inRequireBlock = true
+				continue
+			}
+
+			if inRequireBlock {
+				if line == ")" {
+					inRequireBlock = false
+					continue
+				}
+
+				// Parse dependency line: "github.com/lib/pq v1.10.9"
+				if line != "" && !strings.HasPrefix(line, "//") && !strings.Contains(line, "// indirect") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						modulePath := parts[0]
+						version := parts[1]
+						// Skip workspace-local modules
+						if !strings.Contains(modulePath, s.config.Workspace.Name) {
+							depMap[modulePath] = version
+						}
+					}
+				}
+			} else if strings.HasPrefix(line, "require ") {
+				// Single line require statement
+				line = strings.TrimPrefix(line, "require ")
+				parts := strings.Fields(line)
+				if len(parts) >= 2 && !strings.Contains(line, "// indirect") {
+					modulePath := parts[0]
+					version := parts[1]
+					if !strings.Contains(modulePath, s.config.Workspace.Name) {
+						depMap[modulePath] = version
+					}
+				}
+			}
+		}
+	}
+
+	if goVersion == "" {
+		goVersion = "1.24.0"
+	}
+
+	// Build go.mod content
+	var content strings.Builder
+	moduleName := s.config.Workspace.Name
+	if s.config.Workspace.GitHub != nil && s.config.Workspace.GitHub.Org != "" {
+		moduleName = fmt.Sprintf("github.com/%s/%s", s.config.Workspace.GitHub.Org, s.config.Workspace.Name)
+	}
+
+	content.WriteString(fmt.Sprintf("module %s\n\n", moduleName))
+	content.WriteString(fmt.Sprintf("go %s\n\n", goVersion))
+
+	if len(depMap) > 0 {
+		content.WriteString("require (\n")
+		for mod, ver := range depMap {
+			content.WriteString(fmt.Sprintf("\t%s %s\n", mod, ver))
+		}
+		content.WriteString(")\n")
+	}
+
+	if s.dryRun {
+		fmt.Printf("Would create/update: %s\n", goModPath)
+		return nil
+	}
+
+	return os.WriteFile(goModPath, []byte(content.String()), 0644)
 }

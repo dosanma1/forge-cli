@@ -47,6 +47,7 @@ type WorkspaceMetadata struct {
 	Docker       *DockerConfig      `json:"docker,omitempty"`
 	GCP          *GCPConfig         `json:"gcp,omitempty"`
 	Kubernetes   *KubernetesConfig  `json:"kubernetes,omitempty"`
+	GazelleDirectives []string      `json:"gazelleDirectives,omitempty"`
 }
 
 // WorkspaceDefaults contains workspace-level defaults for projects

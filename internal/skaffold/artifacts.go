@@ -10,7 +10,15 @@ import (
 // CreateBazelArtifact creates a Skaffold Bazel artifact configuration for a project.
 func CreateBazelArtifact(projectName string, project workspace.Project, registry string, bazelArgs []string) *latest.Artifact {
 	target := GenerateBazelTarget(project.Root, project.Language)
-	imageName := fmt.Sprintf("%s/%s", registry, projectName)
+	
+	// If registry is empty, use just the project name (for local development)
+	// This matches the BUILD.bazel file's repo_tags
+	var imageName string
+	if registry == "" {
+		imageName = projectName
+	} else {
+		imageName = fmt.Sprintf("%s/%s", registry, projectName)
+	}
 
 	artifact := &latest.Artifact{
 		ImageName: imageName,

@@ -292,10 +292,10 @@ func runNew(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate we have at least one service or frontend
-	if len(servicesData) == 0 && len(frontendsData) == 0 {
-		fmt.Println("At least one backend service or frontend application is required.")
-		return nil
-	}
+	// if len(servicesData) == 0 && len(frontendsData) == 0 {
+	// 	fmt.Println("At least one backend service or frontend application is required.")
+	// 	return nil
+	// }
 
 	// Show summary
 	fmt.Println("\nWorkspace Configuration:")

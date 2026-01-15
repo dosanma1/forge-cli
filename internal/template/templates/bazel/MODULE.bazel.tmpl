@@ -83,13 +83,12 @@ use_repo(
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "{{.GoVersion}}")
 
-{{if .GoModules}}# Go dependencies from workspace modules
+{{if .HasGo}}# Go dependencies - single source for Bazel compatibility
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-{{range .GoModules}}go_deps.from_file(go_mod = "//{{.}}:go.mod")
+{{if .UseRootGoMod}}go_deps.from_file(go_mod = "//:go.mod")
+{{else if .GoModules}}go_deps.from_file(go_mod = "//{{index .GoModules 0}}:go.mod")
+{{else}}go_deps.from_file(go_mod = "//:go.mod")
 {{end}}{{if .GoDependencies}}use_repo(go_deps, {{range $i, $dep := .GoDependencies}}{{if $i}}, {{end}}"{{$dep}}"{{end}}){{end}}
-{{else}}# Go dependencies from workspace-level go.mod
-go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-go_deps.from_file(go_mod = "//:go.mod")
 {{end}}
 
 {{if .HasFrontend}}
