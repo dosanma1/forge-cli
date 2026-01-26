@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package forge.daemon.v1;
+
+option go_package = "github.com/dosanma1/forge-cli/proto/daemon";
+
+// Daemon service provides the gRPC API for the Forge daemon.
+// Communication happens over Unix socket for local development.
+service Daemon {
+  // CreateWorkspace creates a new workspace with streaming progress
+  rpc CreateWorkspace(CreateWorkspaceRequest) returns (stream CommandMessage);
+
+  // Generate triggers code generation with streaming progress
+  rpc Generate(GenerateRequest) returns (stream CommandMessage);
+
+  // Validate validates the forge.json configuration
+  rpc Validate(ValidateRequest) returns (ValidateResponse);
+
+  // Watch starts watching for file changes
+  rpc Watch(WatchRequest) returns (stream FileEvent);
+
+  // Status returns the daemon status
+  rpc Status(StatusRequest) returns (StatusResponse);
+
+  // Shutdown gracefully stops the daemon
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+
+// CreateWorkspaceRequest contains parameters for workspace creation
+message CreateWorkspaceRequest {
+  string name = 1;
+  string path = 2;
+  string github_org = 3;
+  repeated ServiceConfig services = 4;
+  repeated AppConfig apps = 5;
+}
+
+message ServiceConfig {
+  string name = 1;
+  string language = 2;  // "go" or "nestjs"
+  string deployer = 3;  // "helm" or "cloudrun"
+}
+
+message AppConfig {
+  string name = 1;
+  string language = 2;  // "angular" or "react"
+  string deployer = 3;  // "firebase" or "vercel"
+}
+
+// GenerateRequest contains parameters for code generation
+message GenerateRequest {
+  string project_dir = 1;
+  bool dry_run = 2;
+  bool verbose = 3;
+}
+
+// ValidateRequest contains parameters for validation
+message ValidateRequest {
+  string project_dir = 1;
+  bool strict = 2;
+}
+
+// ValidateResponse contains validation results
+message ValidateResponse {
+  bool valid = 1;
+  repeated ValidationError errors = 2;
+}
+
+message ValidationError {
+  string node_id = 1;
+  string field = 2;
+  string message = 3;
+  bool severe = 4;
+}
+
+// WatchRequest starts file watching
+message WatchRequest {
+  string project_dir = 1;
+  repeated string patterns = 2;  // e.g., ["*.go", "forge.json"]
+}
+
+// FileEvent represents a file system event
+message FileEvent {
+  string path = 1;
+  FileEventType type = 2;
+  int64 timestamp = 3;
+}
+
+enum FileEventType {
+  FILE_EVENT_TYPE_UNSPECIFIED = 0;
+  FILE_EVENT_TYPE_CREATED = 1;
+  FILE_EVENT_TYPE_MODIFIED = 2;
+  FILE_EVENT_TYPE_DELETED = 3;
+  FILE_EVENT_TYPE_RENAMED = 4;
+}
+
+// StatusRequest requests daemon status
+message StatusRequest {}
+
+// StatusResponse contains daemon status
+message StatusResponse {
+  bool running = 1;
+  string version = 2;
+  int64 uptime_seconds = 3;
+  string workspace_dir = 4;
+  int32 active_watchers = 5;
+}
+
+// ShutdownRequest requests graceful shutdown
+message ShutdownRequest {
+  bool force = 1;
+}
+
+// ShutdownResponse confirms shutdown
+message ShutdownResponse {
+  bool success = 1;
+}
+
+// CommandMessage is the streaming response for long-running operations
+message CommandMessage {
+  oneof msg {
+    CommandOutput output = 1;
+    CommandProgress progress = 2;
+    CommandComplete complete = 3;
+    CommandError error = 4;
+  }
+}
+
+// CommandOutput contains stdout/stderr output
+message CommandOutput {
+  string text = 1;
+  bool is_stderr = 2;
+}
+
+// CommandProgress contains progress information
+message CommandProgress {
+  int32 percent = 1;
+  string message = 2;
+  string current_step = 3;
+  int32 total_steps = 4;
+}
+
+// CommandComplete indicates successful completion
+message CommandComplete {
+  string message = 1;
+  map<string, string> metadata = 2;
+}
+
+// CommandError indicates an error occurred
+message CommandError {
+  string message = 1;
+  string code = 2;
+  map<string, string> details = 3;
+}

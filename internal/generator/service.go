@@ -158,15 +158,21 @@ func (g *ServiceGenerator) Generate(ctx context.Context, opts GeneratorOptions) 
 
 	// Generate package files (internal, pkg/*)
 	pkgTemplates := map[string]string{
-		"internal/doc.go":       "service/internal/doc.go.tmpl",
-		"internal/BUILD.bazel":  "service/internal/BUILD.bazel.tmpl",
-		"pkg/api/doc.go":        "service/pkg/api/doc.go.tmpl",
-		"pkg/api/BUILD.bazel":   "service/pkg/api/BUILD.bazel.tmpl",
-		"pkg/model/doc.go":      "service/pkg/model/doc.go.tmpl",
-		"pkg/model/BUILD.bazel": "service/pkg/model/BUILD.bazel.tmpl",
-		"pkg/proto/doc.go":      "service/pkg/proto/doc.go.tmpl",
-		"pkg/proto/BUILD.bazel": "service/pkg/proto/BUILD.bazel.tmpl",
+		"internal/doc.go":            "service/internal/doc.go.tmpl",
+		"internal/BUILD.bazel":       "service/internal/BUILD.bazel.tmpl",
+		"internal/entity.go":         "service/internal/entity.go.tmpl",
+		"internal/transport_rest.go": "service/internal/transport_rest.go.tmpl",
+		"internal/module.go":         "service/internal/module.go.tmpl",
+		"pkg/api/doc.go":             "service/pkg/api/doc.go.tmpl",
+		"pkg/api/BUILD.bazel":        "service/pkg/api/BUILD.bazel.tmpl",
+		"pkg/model/doc.go":           "service/pkg/model/doc.go.tmpl",
+		"pkg/model/BUILD.bazel":      "service/pkg/model/BUILD.bazel.tmpl",
+		"pkg/proto/doc.go":           "service/pkg/proto/doc.go.tmpl",
+		"pkg/proto/BUILD.bazel":      "service/pkg/proto/BUILD.bazel.tmpl",
 	}
+
+	data["EntityNamePascal"] = data["ServiceNamePascal"] // Default entity name = Service Name
+	data["EntityNameCamel"] = data["ServiceNameCamel"]
 
 	for filename, templatePath := range pkgTemplates {
 		content, err := g.engine.RenderTemplate(templatePath, data)

@@ -18,6 +18,7 @@ var (
 	newK8sNamespace   string
 	newGKERegion      string
 	newGKECluster     string
+	newYes            bool // Skip all prompts
 )
 
 var newCmd = &cobra.Command{
@@ -44,25 +45,16 @@ func init() {
 	newCmd.Flags().StringVar(&newK8sNamespace, "k8s-namespace", "", "Kubernetes namespace")
 	newCmd.Flags().StringVar(&newGKERegion, "gke-region", "us-central1", "GKE cluster region")
 	newCmd.Flags().StringVar(&newGKECluster, "gke-cluster", "", "GKE cluster name (defaults to <workspace>-cluster)")
+	newCmd.Flags().BoolVarP(&newYes, "yes", "y", false, "Skip all prompts and use defaults (non-interactive mode)")
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
-	// Create prompter
-	prompter, err := ui.NewPrompter()
-	if err != nil {
-		return fmt.Errorf("failed to create prompter: %w", err)
-	}
-
-	// Get name from args or prompt for it
+	// Get name from args
 	var name string
 	if len(args) > 0 {
 		name = args[0]
-	} else {
-		name, err = prompter.AskText("What name would you like to use for the workspace?", "")
-		if err != nil {
-			fmt.Println("Workspace creation cancelled.")
-			return nil
-		}
+	} else if newYes {
+		return fmt.Errorf("workspace name is required in non-interactive mode")
 	}
 
 	// Collect initial values from flags
@@ -72,6 +64,33 @@ func runNew(cmd *cobra.Command, args []string) error {
 	if githubOrg == "" {
 		if org, err := getOrgFromGit(); err == nil && org != "" {
 			githubOrg = org
+		}
+	}
+
+	// Non-interactive mode
+	if newYes {
+		// Use "example" as fallback if no org found
+		if githubOrg == "" {
+			githubOrg = "example"
+		}
+		return runNewNonInteractive(name, githubOrg)
+	}
+
+	// Interactive mode
+	var err error
+
+	// Create prompter
+	prompter, err := ui.NewPrompter()
+	if err != nil {
+		return fmt.Errorf("failed to create prompter: %w", err)
+	}
+
+	// Get name from args or prompt for it
+	if name == "" {
+		name, err = prompter.AskText("What name would you like to use for the workspace?", "")
+		if err != nil {
+			fmt.Println("Workspace creation cancelled.")
+			return nil
 		}
 	}
 
@@ -356,6 +375,42 @@ func runNew(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  $ cd %s\n", name)
 	fmt.Printf("  $ forge build\n")
+
+	return nil
+}
+
+// runNewNonInteractive creates a workspace without any prompts
+func runNewNonInteractive(name, githubOrg string) error {
+	fmt.Printf("CREATE Creating workspace '%s'...\n", name)
+
+	// Create generator
+	gen := generator.NewWorkspaceGenerator()
+
+	// Prepare options with empty services/frontends (they will be added via forge generate)
+	opts := generator.GeneratorOptions{
+		OutputDir: ".",
+		Name:      name,
+		Data: map[string]interface{}{
+			"github_org":      githubOrg,
+			"docker_registry": newDockerRegistry,
+			"gcp_project_id":  newGCPProjectID,
+			"k8s_namespace":   newK8sNamespace,
+			"gke_region":      newGKERegion,
+			"gke_cluster":     newGKECluster,
+			"services":        []interface{}{},
+			"frontends":       []interface{}{},
+		},
+		DryRun: false,
+	}
+
+	// Generate workspace
+	ctx := context.Background()
+	if err := gen.Generate(ctx, opts); err != nil {
+		return fmt.Errorf("failed to create workspace: %w", err)
+	}
+
+	fmt.Printf("CREATE %s\n", name)
+	fmt.Println("✔ Workspace created successfully.")
 
 	return nil
 }

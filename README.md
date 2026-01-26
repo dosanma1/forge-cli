@@ -18,13 +18,9 @@ Forge consists of two repositories:
 ### Install Forge CLI
 
 ```bash
-# Install forge-cli
-go install github.com/dosanma1/forge-cli/cmd/forge@latest
-
-# Or build from source
 git clone https://github.com/dosanma1/forge-cli
 cd forge-cli
-go build -o forge cmd/forge/main.go
+make install
 ```
 
 ### Prerequisites

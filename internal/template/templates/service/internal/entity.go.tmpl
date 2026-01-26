@@ -1,0 +1,33 @@
+package internal
+
+import (
+	"context"
+	"time"
+
+    "github.com/google/uuid"
+)
+
+// {{ .EntityNamePascal }} represents the core domain entity.
+type {{ .EntityNamePascal }} struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+    // Add additional fields here
+}
+
+// {{ .EntityNamePascal }}Repository defines storage operations.
+//
+//go:generate mockery --name {{ .EntityNamePascal }}Repository --outpkg mocks --output mocks --filename {{ .EntityNameCamel }}_repository.go
+type {{ .EntityNamePascal }}Repository interface {
+	Find(ctx context.Context, id uuid.UUID) (*{{ .EntityNamePascal }}, error)
+	Save(ctx context.Context, entity *{{ .EntityNamePascal }}) error
+    Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// {{ .EntityNamePascal }}Service defines business logic operations.
+//
+//go:generate mockery --name {{ .EntityNamePascal }}Service --outpkg mocks --output mocks --filename {{ .EntityNameCamel }}_service.go
+type {{ .EntityNamePascal }}Service interface {
+    Get(ctx context.Context, id uuid.UUID) (*{{ .EntityNamePascal }}, error)
+    Create(ctx context.Context, params Create{{ .EntityNamePascal }}Params) (*{{ .EntityNamePascal }}, error)
+}

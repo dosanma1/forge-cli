@@ -1,0 +1,20 @@
+package internal
+
+import (
+	"go.uber.org/fx"
+)
+
+// Module exports the Fx module for this service.
+var Module = fx.Module("{{ .ServiceName }}",
+    fx.Provide(
+        // Repositories
+        // New{{ .EntityNamePascal }}Repository, // TODO: Implement repository
+
+        // Services
+        // New{{ .EntityNamePascal }}Service, // TODO: Implement service
+    ),
+    fx.Invoke(
+        // Register Controllers
+        // rest.NewFxController(New{{ .EntityNamePascal }}Controller),
+    ),
+)

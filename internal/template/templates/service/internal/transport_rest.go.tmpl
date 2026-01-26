@@ -1,0 +1,43 @@
+package internal
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+
+	"github.com/dosanma1/forge/go/kit/transport/rest"
+	"github.com/google/uuid"
+)
+
+// New{{ .EntityNamePascal }}Controller creates a new REST controller for {{ .EntityNamePascal }}.
+func New{{ .EntityNamePascal }}Controller(svc {{ .EntityNamePascal }}Service) rest.Controller {
+	return &{{ .EntityNameCamel }}Controller{svc: svc}
+}
+
+type {{ .EntityNameCamel }}Controller struct {
+	svc {{ .EntityNamePascal }}Service
+}
+
+func (c *{{ .EntityNameCamel }}Controller) BasePath() string {
+	return "/v1/{{ .EntityNameCamel }}s"
+}
+
+func (c *{{ .EntityNameCamel }}Controller) Version() string {
+	return ""
+}
+
+func (c *{{ .EntityNameCamel }}Controller) Endpoints() []rest.Endpoint {
+	return []rest.Endpoint{
+		rest.NewEndpoint(http.MethodGet, "/:id", c.get),
+        rest.NewEndpoint(http.MethodPost, "/", c.create),
+	}
+}
+
+func (c *{{ .EntityNameCamel }}Controller) get(w http.ResponseWriter, r *http.Request) {
+    // Basic implementation placeholder - replace with actual decoding logic
+    // id := rest.Param(r, "id")
+}
+
+func (c *{{ .EntityNameCamel }}Controller) create(w http.ResponseWriter, r *http.Request) {
+    // Basic implementation placeholder
+}

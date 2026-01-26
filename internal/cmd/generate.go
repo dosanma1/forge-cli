@@ -38,6 +38,7 @@ var (
 	serviceLanguage string
 	serviceDeployer string
 	appLanguage     string
+	appDeployer     string
 )
 
 var generateServiceCmd = &cobra.Command{
@@ -106,6 +107,7 @@ func init() {
 	generateServiceCmd.Flags().StringVarP(&serviceLanguage, "lang", "l", "", "Service language (go, nestjs)")
 	generateServiceCmd.Flags().StringVarP(&serviceDeployer, "deployer", "d", "", "Deployment target (helm, cloudrun)")
 	generateAppCmd.Flags().StringVarP(&appLanguage, "lang", "l", "", "Application language (angular, react)")
+	generateAppCmd.Flags().StringVarP(&appDeployer, "deployer", "d", "", "Deployment target (firebase, helm, cloudrun)")
 
 	generateCmd.AddCommand(generateServiceCmd)
 	generateCmd.AddCommand(generateAppCmd)
@@ -318,23 +320,31 @@ func runGenerateApp(cmd *cobra.Command, args []string) error {
 	// Normalize language
 	appLanguage = strings.ToLower(appLanguage)
 
-	// Prompt for deployer selection
-	_, deployerChoice, err := ui.AskSelect("Select deployment target:", []string{"Firebase", "Helm (Kubernetes)", "CloudRun"})
-	if err != nil {
-		return fmt.Errorf("cancelled: %w", err)
-	}
-
-	// Map display names to internal names
+	// Prompt for deployer selection if not provided
 	var deployer string
-	switch deployerChoice {
-	case "Firebase":
-		deployer = "firebase"
-	case "Helm (Kubernetes)":
-		deployer = "helm"
-	case "CloudRun":
-		deployer = "cloudrun"
-	default:
-		deployer = "firebase"
+	if appDeployer != "" {
+		deployer = strings.ToLower(appDeployer)
+		// Validate deployer
+		if deployer != "firebase" && deployer != "helm" && deployer != "cloudrun" {
+			return fmt.Errorf("unsupported deployer: %s (supported: firebase, helm, cloudrun)", deployer)
+		}
+	} else {
+		_, deployerChoice, err := ui.AskSelect("Select deployment target:", []string{"Firebase", "Helm (Kubernetes)", "CloudRun"})
+		if err != nil {
+			return fmt.Errorf("cancelled: %w", err)
+		}
+
+		// Map display names to internal names
+		switch deployerChoice {
+		case "Firebase":
+			deployer = "firebase"
+		case "Helm (Kubernetes)":
+			deployer = "helm"
+		case "CloudRun":
+			deployer = "cloudrun"
+		default:
+			deployer = "firebase"
+		}
 	}
 
 	// Create appropriate generator
