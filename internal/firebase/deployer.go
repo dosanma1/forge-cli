@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // Deploy deploys a project to Firebase Hosting using the Firebase CLI.

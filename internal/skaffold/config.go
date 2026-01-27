@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/schema/latest"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // GenerateConfig creates a unified Skaffold configuration from forge.json.

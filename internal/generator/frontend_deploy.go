@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // generateEnvironmentFiles creates environment.ts files for different environments

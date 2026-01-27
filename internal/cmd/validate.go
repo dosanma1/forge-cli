@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 	"github.com/dosanma1/forge-cli/schemas"
 )
 

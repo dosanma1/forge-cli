@@ -8,7 +8,7 @@ import (
 
 	"github.com/dosanma1/forge-cli/internal/generator"
 	"github.com/dosanma1/forge-cli/internal/ui"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // SwitcherOptions contains options for switching deployers

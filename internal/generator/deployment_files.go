@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/dosanma1/forge-cli/internal/template"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // DeploymentFileGenerator generates deployment configuration files

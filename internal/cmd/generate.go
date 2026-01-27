@@ -10,7 +10,7 @@ import (
 	"github.com/dosanma1/forge-cli/internal/generator"
 	"github.com/dosanma1/forge-cli/internal/template"
 	"github.com/dosanma1/forge-cli/internal/ui"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 	"github.com/spf13/cobra"
 )
 

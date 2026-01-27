@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/schema/latest"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // GenerateProfiles creates Skaffold profiles from forge.json configurations.

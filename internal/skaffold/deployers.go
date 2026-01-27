@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/schema/latest"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // CreateMultiDeployer creates a Skaffold deploy configuration supporting multiple deployers.

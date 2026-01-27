@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/template"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // SyncReport contains the results of a sync operation.

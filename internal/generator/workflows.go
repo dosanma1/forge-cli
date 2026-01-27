@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/dosanma1/forge-cli/internal/template"
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 )
 
 // WorkflowGenerator generates and updates GitHub Actions workflows

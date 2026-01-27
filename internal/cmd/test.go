@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dosanma1/forge-cli/internal/workspace"
+	"github.com/dosanma1/forge-cli/pkg/workspace"
 	"github.com/spf13/cobra"
 )
 
